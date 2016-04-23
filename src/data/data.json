@@ -1,0 +1,132 @@
+[
+    {
+        "name": "Soldier",
+        "mov": 4,
+        "atk": 5,
+        "def": 1,
+        "min": 1,
+        "max": 1,
+        "cost": 150,
+        "bits": [
+            8
+        ]
+    },
+    {
+        "name": "Archer",
+        "mov": 4,
+        "atk": 5,
+        "def": 1,
+        "min": 2,
+        "max": 1,
+        "cost": 250,
+        "bits": [
+            64
+        ]
+    },
+    {
+        "name": "Lizard",
+        "mov": 6,
+        "atk": 5,
+        "def": 2,
+        "min": 1,
+        "max": 1,
+        "cost": 300,
+        "bits": [
+            2
+        ]
+    },
+    {
+        "name": "Wizard",
+        "mov": 4,
+        "atk": 4,
+        "def": 1,
+        "min": 1,
+        "max": 1,
+        "cost": 400,
+        "bits": [
+            32
+        ]
+    },
+    {
+        "name": "Wisp",
+        "mov": 4,
+        "atk": 3,
+        "def": 2,
+        "min": 1,
+        "max": 1,
+        "cost": 500,
+        "bits": [
+            256
+        ]
+    },
+    {
+        "name": "Spider",
+        "mov": 5,
+        "atk": 6,
+        "def": 2,
+        "min": 1,
+        "max": 1,
+        "cost": 600,
+        "bits": [
+            128
+        ]
+    },
+    {
+        "name": "Golem",
+        "mov": 4,
+        "atk": 6,
+        "def": 4,
+        "min": 1,
+        "max": 1,
+        "cost": 600,
+        "bits": []
+    },
+    {
+        "name": "Catapult",
+        "mov": 3,
+        "atk": 7,
+        "def": 2,
+        "min": 4,
+        "max": 2,
+        "cost": 700,
+        "bits": [
+            512
+        ]
+    },
+    {
+        "name": "Wyvern",
+        "mov": 7,
+        "atk": 8,
+        "def": 3,
+        "min": 1,
+        "max": 1,
+        "cost": 1000,
+        "bits": [
+            1
+        ]
+    },
+    {
+        "name": "King",
+        "mov": 4,
+        "atk": 5,
+        "def": 3,
+        "min": 1,
+        "max": 1,
+        "cost": 65535,
+        "bits": [
+            4,
+            8,
+            16
+        ]
+    },
+    {
+        "name": "Skeleton",
+        "mov": 4,
+        "atk": 5,
+        "def": 1,
+        "min": 1,
+        "max": 1,
+        "cost": 65535,
+        "bits": []
+    }
+]

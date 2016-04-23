@@ -1,0 +1,123 @@
+[
+    {
+        "name": "Soldier",
+        "tile": 50,
+        "cost": 150,
+        "atk": 5,
+        "def": 1,
+        "mov": 4,
+        "min": 0,
+        "max": 1,
+        "desc": "Hardworking and brave, soldiers form the backbone of any army. They are also the only unit that can capture towns to earn gold."
+    },
+    {
+        "name": "Archer",
+        "tile": 52,
+        "cost": 250,
+        "atk": 5,
+        "def": 1,
+        "mov": 4,
+        "min": 0,
+        "max": 2,
+        "desc": "With their powerful bows archers can attack from a distance and are especially powerful against airborne enemies."
+    },
+    {
+        "name": "Lizard",
+        "tile": 54,
+        "cost": 300,
+        "atk": 5,
+        "def": 2,
+        "mov": 6,
+        "min": 0,
+        "max": 1,
+        "desc": "Descendants of the ancient amphibian empire spanning the marshlands in the east, lizards are proud warriors. They are immensely mobile and stronger in defence when in water."
+    },
+    {
+        "name": "Wizard",
+        "tile": 56,
+        "cost": 400,
+        "atk": 4,
+        "def": 1,
+        "mov": 4,
+        "min": 0,
+        "max": 1,
+        "desc": "The ancient guild of wizards are weak at close combat, but immensely useful as they can summon fighting skeletons from dead troops."
+    },
+    {
+        "name": "Wisp",
+        "tile": 58,
+        "cost": 500,
+        "atk": 3,
+        "def": 2,
+        "mov": 4,
+        "min": 0,
+        "max": 1,
+        "desc": "These mystical beings of pure Light radiate an aura which adds attack points to nearby friendly units. In close combat they are especially deadly against skeletons."
+    },
+    {
+        "name": "Spider",
+        "tile": 60,
+        "cost": 600,
+        "atk": 6,
+        "def": 2,
+        "mov": 5,
+        "min": 0,
+        "max": 1,
+        "desc": "Spiders are dangerous creatures whose natural habitat spans the unforgiving dark forests of the west. In addition to being highly mobile, spiders use a poisoned attack to weaken their opponents for one turn."
+    },
+    {
+        "name": "Golem",
+        "tile": 62,
+        "cost": 0,
+        "atk": 6,
+        "def": 4,
+        "mov": 4,
+        "min": 0,
+        "max": 1,
+        "desc": "Forged out of living rock by the dwarf tribes of the Lost Mountains, golems are slow but immensely strong in defence. A golem stationed in a building or a well defended mountain is very difficult to defeat."
+    },
+    {
+        "name": "Catapult",
+        "tile": 64,
+        "cost": 0,
+        "atk": 7,
+        "def": 2,
+        "mov": 3,
+        "min": 2,
+        "max": 4,
+        "desc": "Catapults bring devastation wherever they go with their enormous attack range. However, their relative immobility and inability to attack up close make them vulnerable, so guard them well. Catapults can either move or attack during a turn, but not do both."
+    },
+    {
+        "name": "Wyvern",
+        "tile": 66,
+        "cost": 0,
+        "atk": 8,
+        "def": 3,
+        "mov": 7,
+        "min": 0,
+        "max": 1,
+        "desc": "These majestic flying beasts have ruled over the mountains of mist since ancient times. They are extremely mobile as well as deadly in attack on land, air and sea."
+    },
+    {
+        "name": "King",
+        "tile": 68,
+        "cost": 0,
+        "atk": 0,
+        "def": 0,
+        "mov": 4,
+        "min": 0,
+        "max": 1,
+        "desc": "The heartbeat of the army, a King is very strong in attack and defence. Kings do not usually take part in battles, as they are the only units capable to buy new troops when stationed in a castle."
+    },
+    {
+        "name": "Skeleton",
+        "tile": 70,
+        "cost": 0,
+        "atk": 0,
+        "def": 0,
+        "mov": 4,
+        "min": 0,
+        "max": 1,
+        "desc": "Summoned by wizards, these lifeless warriors are as strong as soldiers and deadly opponents on any battlefield."
+    }
+]

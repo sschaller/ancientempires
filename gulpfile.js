@@ -2,6 +2,11 @@ var fs = require('fs');
 var path = require('path');
 
 var gulp = require('gulp');
+var sourcemaps = require('gulp-sourcemaps');
+var concat = require('gulp-concat');
+
+var typescript = require("gulp-typescript");
+var tslint = require("gulp-tslint");
 
 // Load all gulp plugins automatically
 // and attach them to the `plugins` object
@@ -147,6 +152,24 @@ gulp.task('lint:js', function () {
       .pipe(plugins.jshint())
       .pipe(plugins.jshint.reporter('jshint-stylish'))
       .pipe(plugins.jshint.reporter('fail'));
+});
+
+gulp.task('lint:ts', function () {
+    gulp.src("src/js/*.ts")
+        .pipe(tslint())
+        .pipe(tslint.report("verbose"))
+});
+gulp.task('compile:ts', function () {
+    var tsResult = gulp.src("src/js/*.ts")
+        .pipe(sourcemaps.init())
+        .pipe(typescript({
+            noImplicitAny: true,
+            sortOutput: true
+        }));
+    return tsResult.js
+        .pipe(concat('main.js')) // You can use other plugins that also support gulp-sourcemaps
+        .pipe(sourcemaps.write()) // Now the sourcemaps are added to the .js file
+        .pipe(gulp.dest('src/js'));
 });
 
 

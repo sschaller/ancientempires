@@ -1,127 +1,86 @@
-/// <reference path="vendor/phaser.d.ts" />
-
-/// <reference path="ancientempires.ts" />
-/// <reference path="util.ts" />
-/// <reference path="sprite.ts" />
-/// <reference path="entity.ts" />
-/// <reference path="smoke.ts" />
-/// <reference path="tilemanager.ts" />
-/// <reference path="pathfinder.ts" />
-/// <reference path="cursor.ts" />
-/// <reference path="frame.ts" />
-/// <reference path="dialog.ts" />
-
-interface StartObject {
-    entities: EntityStart[];
-    buildings: BuildingStart[];
-    turn: Alliance;
-}
-
-interface DataObject {
-    name: string;
-    size: number;
-    start: StartObject;
-    map: string;
-}
-
 class GameController extends Phaser.State {
 
-    map: Phaser.Tilemap;
-    data: DataObject;
-    mapName: string;
+    map: Map;
 
-    tileManager: TileManager;
-    pathfinder: Pathfinder;
+    tile_manager: TileManager;
+    entity_manager: EntityManager;
+    smoke_manager: SmokeManager;
+    frame_manager: FrameManager;
 
     turn: Alliance;
-    selected: Entity = null;
 
-    cursor: Cursor;
-    activeWaypoints: Waypoint[];
+    cursor: Sprite;
 
-    anim_state: number = 0;
+    selected: Entity;
+
     acc: number = 0;
+    private last_cursor_position: Pos;
+
+    private anim_cursor_state: number;
+    private anim_cursor_slow: number;
 
     constructor() {
         super();
     }
 
     init(name: string) {
-        this.mapName = name;
-    }
-    preload() {
-        this.game.load.json("map", "data/" + this.mapName + ".json");
+        this.map = new Map(name);
+
+        this.turn = Alliance.Blue;
+
+        this.anim_cursor_state = 0;
+        this.anim_cursor_slow = 0;
     }
     create() {
 
-        Sprite.game = this.game;
-        TileManager.game = this.game;
-        Frame.game = this.game;
-        Dialog.game = this.game;
+        let tilemap = this.game.add.tilemap();
+        let tilemap_group = this.game.add.group();
+        let smoke_group = this.game.add.group();
+        let selection_group = this.game.add.group();
+        let entity_group = this.game.add.group();
+        let interaction_group = this.game.add.group();
+        let cursor_group = this.game.add.group();
+        let frame_group = this.game.add.group();
 
-        this.data = this.game.cache.getJSON("map");
-        this.data.map = this.data.map.replace(/\s/g, "");
-        this.turn = this.data.start.turn || Alliance.Blue;
+        this.tile_manager = new TileManager(this.map, tilemap, tilemap_group);
 
-        TileManager.tileMap = this.game.add.tilemap();
-        TileManager.tileMap.addTilesetImage("tileset", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE);
+        this.smoke_manager = new SmokeManager(this.map, smoke_group);
 
-        this.tileManager = new TileManager(this.data.map, this.data.start.buildings, this.data.size, this.data.size);
-        this.pathfinder = new Pathfinder(this.tileManager);
+        this.entity_manager = new EntityManager(this.map, entity_group, selection_group, interaction_group);
 
-        Cursor.interactionGroup = this.game.add.group();
+        this.cursor = new Sprite({x: 0, y: 0}, cursor_group, "cursor", [0, 1]);
 
-        Smoke.all = [];
-        Smoke.group = this.game.add.group();
-        Smoke.loadHouses(this.tileManager.getOccupiedHouses());
+        this.frame_manager = new FrameManager(frame_group);
 
-        Entity.all = [];
-        Entity.group = this.game.add.group();
-        Entity.pathfinder = this.pathfinder;
-        Entity.loadEntities(this.data.start.entities);
+        this.tile_manager.draw();
 
-        Frame.all = [];
-
-        Cursor.cursorGroup = this.game.add.group();
-        this.cursor = new Cursor(this.click, this);
-
-        this.tileManager.draw();
+        this.game.input.onDown.add(this.click, this);
     }
-    click(position: Pos) {
+    getActivePos(): Pos {
+        // pos always inside canvas
+        let x = Math.floor(this.game.input.activePointer.x / AncientEmpires.TILE_SIZE);
+        let y = Math.floor(this.game.input.activePointer.y / AncientEmpires.TILE_SIZE);
+        return new Pos(x, y);
+    }
+    click() {
 
-        let prev_selected = this.selected;
-        let entity = Entity.getEntityAt(position);
+        let position = this.getActivePos();
 
-        if (this.selected) {
-            if (!entity && Pathfinder.findPositionInList(position, this.activeWaypoints) != null) {
-                // we are able to walk there
-                console.log("walk to: " + position.getInfo());
-                let waypoint = Pathfinder.findPositionInList(position, this.activeWaypoints);
-                this.selected.move(position, Pathfinder.getLineToWaypoint(waypoint));
-            }
-            this.deselectEntity();
+        let selected = this.entity_manager.selected;
+        let entity = this.entity_manager.getEntityAt(position);
+
+        if (!!entity) {
+            // entity is there - deselect current
+            this.entity_manager.deselectEntity();
+        }else if (!!selected) {
+            // no entity and selected entity
+            this.entity_manager.moveSelectedEntity(position);
         }
 
-        if (!!entity && entity.alliance == this.turn && (!prev_selected || !position.match(prev_selected.position))) {
-            this.selectEntity(entity);
+        if (!!entity && entity != selected) {
+            this.entity_manager.selectEntity(entity);
         }
 
-    }
-    selectEntity(entity: Entity) {
-
-        console.log("selected entity: " + entity.getInfo());
-
-        this.selected = entity;
-        let waypoints = this.pathfinder.getReachableWaypointsForEntity(entity);
-        this.activeWaypoints = waypoints;
-        this.tileManager.showWalkRange(waypoints);
-        this.cursor.showWay(waypoints);
-    }
-    deselectEntity() {
-        this.tileManager.hideWalkRange(this.activeWaypoints);
-        this.cursor.hideWay();
-        this.activeWaypoints = null;
-        this.selected = null;
     }
     update() {
         // 1 step is 1/60 sec
@@ -132,10 +91,27 @@ class GameController extends Phaser.State {
         this.acc -= steps * 16;
         if (steps > 2) { steps = 2; }
 
-        Entity.update(steps);
+        this.anim_cursor_slow += steps;
+        if (this.anim_cursor_slow > 30) {
+            this.anim_cursor_slow -= 30;
+            this.anim_cursor_state = 1 - this.anim_cursor_state;
+            this.cursor.setFrame(this.anim_cursor_state);
+        }
+
+        let cursor_position = this.getActivePos();
+        if (!cursor_position.match(this.last_cursor_position)) {
+            this.last_cursor_position = cursor_position;
+            this.cursor.setWorldPosition({x: cursor_position.x * AncientEmpires.TILE_SIZE - 1, y: cursor_position.y * AncientEmpires.TILE_SIZE - 1});
+        }
+
+        this.tile_manager.update(steps);
+        this.smoke_manager.update(steps);
+
+        this.entity_manager.update(steps, cursor_position, this.anim_cursor_state);
+
         this.cursor.update(steps);
-        Smoke.update(steps);
-        this.tileManager.update(steps);
-        Frame.update(steps);
+
+        this.frame_manager.update(steps);
+
     }
 }

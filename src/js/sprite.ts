@@ -1,49 +1,29 @@
-interface SpriteFrames {
-    names: string[];
-    ids: number[];
-}
 class Sprite {
 
-    static game: Phaser.Game;
-
-    frames: SpriteFrames;
-    currentFrame: number;
+    name: string;
+    frames: number[];
 
     sprite: Phaser.Sprite;
-    worldPosition: Pos;
+    worldPosition: IPos;
 
-    constructor(position: Pos, group: Phaser.Group, frames: SpriteFrames) {
+    constructor(world_position: IPos, group: Phaser.Group, name: string, frames: number[] = []) {
 
-        this.worldPosition = position;
+        this.worldPosition = world_position;
+
+        this.name = name;
         this.frames = frames;
 
-        this.currentFrame = 0;
-        this.loadSprite();
-
+        this.sprite = group.game.add.sprite(this.worldPosition.x, this.worldPosition.y, this.name);
+        this.sprite.frame = this.frames[0];
         group.add(this.sprite);
 
     }
-    loadSprite() {
-        this.sprite = Sprite.game.add.sprite(this.worldPosition.x, this.worldPosition.y, "sprites");
-        this.sprite.frameName = this.frames.names[0];
+    setFrame(frame: number) {
+        this.sprite.frame = this.frames[frame % this.frames.length];
     }
-
-    nextFrame() {
-        if (this.frames.names.length > 1) {
-            this.currentFrame++;
-            if (this.currentFrame >= this.frames.names.length) {
-                this.currentFrame = 0;
-            }
-            this.sprite.frameName = this.frames.names[this.currentFrame];
-            return;
-        }
-        if (this.frames.ids.length > 1) {
-            this.currentFrame++;
-            if (this.currentFrame >= this.frames.ids.length) {
-                this.currentFrame = 0;
-            }
-            this.sprite.frame = this.frames.ids[this.currentFrame];
-        }
+    setWorldPosition(world_position: IPos) {
+        this.worldPosition = world_position;
+        this.update();
     }
     update(steps: number = 1) {
         this.sprite.x = this.worldPosition.x;

@@ -1,100 +1,45 @@
-/// <reference path="vendor/phaser.d.ts" />
-enum Tile {
-    Water,
-    Bridge,
-    Path,
-    Grass,
-    Hill,
-    Forest,
-    Mountain,
-    House,
-    Castle
-}
 enum Alliance {
     None,
     Blue,
     Red
 }
-interface Building {
-    castle: boolean;
-    position: Pos;
-    alliance: Alliance;
-}
-interface BuildingStart {
-    x: number;
-    y: number;
-    alliance: Alliance;
-}
-enum TintAnimation {
-    None,
-    Increasing,
-    Decreasing
-}
 class TileManager {
 
-    static game: Phaser.Game;
-    static tileMap: Phaser.Tilemap;
-
-    width: number;
-    height: number;
-    map: string;
-    buildings: Building[];
+    map: Map;
     waterState: number = 0;
 
-    game: Phaser.Game;
     tilemap: Phaser.Tilemap;
-    backgroundLayer: Phaser.TilemapLayer;
-    objectLayer: Phaser.TilemapLayer;
-    interactionLayer: Phaser.TilemapLayer;
+    group: Phaser.Group;
 
-    interactionLayerTintAnimation: TintAnimation = TintAnimation.None;
-    interactionLayerTintProgress: number = 100;
+    backgroundLayer: Phaser.TilemapLayer;
+    buildingLayer: Phaser.TilemapLayer;
 
     waterTimer: number = 0;
 
     static doesTileCutGrass(tile: Tile): boolean {
         return (tile == Tile.Path || tile == Tile.Water || tile == Tile.Bridge);
     }
-    static getIndexForForm(fbit: number): number {
-        if (fbit == 8 + 4 + 2 + 1) { return 15; }
-        if (fbit == 8 + 4 + 1) { return 14; }
-        if (fbit == 8 + 4 + 2) { return 13; }
-        if (fbit == 4 + 2 + 1) { return 12; }
-        if (fbit == 8 + 2 + 1) { return 11; }
-        if (fbit == 1 + 8) { return 10; }
-        if (fbit == 4 + 8) { return 9; }
-        if (fbit == 2 + 4) { return 8; }
-        if (fbit == 1 + 2) { return 7; }
-        if (fbit == 1 + 4) { return 6; }
-        if (fbit == 2 + 8) { return 5; }
-        if (fbit == 8) { return 4; }
-        if (fbit == 4) { return 3; }
-        if (fbit == 2) { return 2; }
-        if (fbit == 1) { return 1; }
-        return 0;
-    }
 
-    constructor(map: string, buildings: BuildingStart[], width: number, height: number) {
+    constructor(map: Map, tilemap: Phaser.Tilemap, tilemap_group: Phaser.Group) {
         this.map = map;
-        this.width = width;
-        this.height = height;
+        this.tilemap = tilemap;
+        this.group = tilemap_group;
 
-        this.buildings = [];
-        for (let building of buildings) {
-            let pos = new Pos(building.x, building.y);
-            this.buildings.push({castle: this.getTileAt(pos) == Tile.Castle, position: pos, alliance: building.alliance});
-        }
+        this.tilemap.addTilesetImage("tiles0", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, 0);
+        this.tilemap.addTilesetImage("buildings_2", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES);
+        this.tilemap.addTilesetImage("buildings_0", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES + 3);
+        this.tilemap.addTilesetImage("buildings_1", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES + 6);
 
-        this.backgroundLayer = TileManager.tileMap.create("background", this.width, this.height, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE);
+        this.backgroundLayer = this.tilemap.create("background", this.map.width, this.map.height, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, this.group);
         this.backgroundLayer.resizeWorld();
-        this.objectLayer = TileManager.tileMap.createBlankLayer("object", this.width, this.height, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE);
-        this.interactionLayer = TileManager.tileMap.createBlankLayer("interaction", this.width, this.height, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE);
+
+        this.buildingLayer = this.tilemap.createBlankLayer("building", this.map.width, this.map.height, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, this.group);
 
     }
 
     draw() {
-        for (let y = 0; y < this.height; y++) {
-            for (let x = 0; x < this.width; x++) {
+        for (let x = 0; x < this.map.width; x++) {
+            for (let y = 0; y < this.map.height; y++) {
                 this.drawTileAt(new Pos(x, y));
             }
         }
@@ -108,46 +53,24 @@ class TileManager {
             this.updateWater();
         }
 
-        if (this.interactionLayerTintAnimation != TintAnimation.None) {
-            this.updateInteractionLayer(steps);
+    }
+
+    getImageIndexForObjectTile(tile: Tile): number {
+
+        if (tile == Tile.Mountain) {
+            return 0;
         }
-
-    }
-
-    updateInteractionLayer(steps: number) {
-        let value = this.interactionLayerTintProgress / 100 * 0xFF | 0;
-        this.interactionLayer.tint = (value << 16) | (value << 8) | value;
-
-        if (this.interactionLayerTintAnimation == TintAnimation.Increasing) {
-            this.interactionLayerTintProgress += steps;
-            if (this.interactionLayerTintProgress >= 100) {
-                this.interactionLayerTintProgress = 100;
-                this.interactionLayerTintAnimation = TintAnimation.Decreasing;
-            }
-        } else {
-            this.interactionLayerTintProgress -= steps;
-            if (this.interactionLayerTintProgress <= 40) {
-                this.interactionLayerTintProgress = 40;
-                this.interactionLayerTintAnimation = TintAnimation.Increasing;
-            }
+        if (tile == Tile.Forest) {
+            return 1;
         }
-    }
-
-    getTileAt(p: Pos): Tile {
-        return +this.map.charAt(p.y * this.width + p.x);
-    }
-    getObjectAt(p: Pos): number {
-        switch (this.getTileAt(p)) {
-            case 4:
-                return 21;
-            case 5:
-                return 22;
-            case 6:
-                return 23;
-            case 7:
-                return 24;
-            case 8:
-                return 27;
+        if (tile == Tile.Hill) {
+            return 2;
+        }
+        if (tile == Tile.House) {
+            return AncientEmpires.NUMBER_OF_TILES;
+        }
+        if (tile == Tile.Castle) {
+            return AncientEmpires.NUMBER_OF_TILES + 1;
         }
         return -1;
     }
@@ -156,110 +79,71 @@ class TileManager {
         let oldState = this.waterState;
         this.waterState = 1 - this.waterState;
 
-        TileManager.tileMap.replace(oldState, this.waterState, 0, 0, this.width, this.height, this.backgroundLayer);
+        this.tilemap.replace(21 + oldState, 21 + this.waterState, 0, 0, this.map.width, this.map.height, this.backgroundLayer);
     }
 
-    drawTileAt(p: Pos) {
-        TileManager.tileMap.putTile(this.getBackgroundAt(p), p.x, p.y, this.backgroundLayer);
-
-        let tile = this.getTileAt(p);
-        let obj = this.getObjectAt(p);
+    drawTileAt(position: Pos) {
+        this.tilemap.putTile(this.getImageIndexForBackgroundAt(position), position.x, position.y, this.backgroundLayer);
+        let tile = this.map.getTileAt(position);
+        let obj = this.getImageIndexForObjectTile(tile);
         if (obj >= 0) {
             if (tile == Tile.House || tile == Tile.Castle) {
-
-                if (tile == Tile.Castle && p.y > 0) {
-                    // Add roof to castle on above tile
-                    TileManager.tileMap.putTile(30 + this.getAllianceAt(p), p.x, p.y - 1, this.objectLayer);
+                let alliance = this.map.getAllianceAt(position);
+                obj += alliance * 3;
+                if (tile == Tile.Castle && position.y > 0) {
+                    // roof of castle
+                    this.tilemap.putTile(obj + 1, position.x, position.y - 1, this.buildingLayer);
                 }
-
-                obj += this.getAllianceAt(p);
-
             }
-            TileManager.tileMap.putTile(obj, p.x, p.y, this.objectLayer);
+            this.tilemap.putTile(obj, position.x, position.y, this.buildingLayer);
         }
     }
-    getBackgroundAt(p: Pos): number {
-        switch (this.getTileAt(p)) {
-            case 0:
+    getImageIndexForBackgroundAt(position: Pos): number {
+        switch (this.map.getTileAt(position)) {
+            case Tile.Water:
                 // Water
-                return 0;
-            case 1:
+                return 21;
+            case Tile.Bridge:
                 // Bridge
-                let adj = this.getAdjacentTilesAt(p);
+                let adj = this.map.getAdjacentTilesAt(position);
                 if (adj[0] != Tile.Water || adj[2] != Tile.Water) {
-                    return 3;
+                    return 20;
                 }
-                return 4;
-            case 2:
+                return 19;
+            case Tile.Path:
                 // Path
-                return 2;
-            case 3:
-            case 4:
-            case 5:
-            case 6:
-            case 7:
-            case 8:
-                return this.getIndexForGrassAt(p);
+                return 18;
+            case Tile.Grass:
+            case Tile.Hill:
+            case Tile.Forest:
+            case Tile.Mountain:
+            case Tile.House:
+            case Tile.Castle:
+                return this.getImageIndexForGrassAt(position);
         }
         return 2;
     }
-    getAdjacentPositionsAt(p: Pos): Pos[] {
-        let ret: Pos[] = [];
-
-        // top, right, bottom, left
-        if (p.y > 0) { ret.push(new Pos(p.x, p.y - 1)); }
-        if (p.x < this.width - 1) { ret.push(new Pos(p.x + 1, p.y)); }
-        if (p.y < this.height - 1) { ret.push(new Pos(p.x, p.y + 1)); }
-        if (p.x > 0) { ret.push(new Pos(p.x - 1, p.y)); }
-
-        return ret;
-    }
-    getAdjacentTilesAt(p: Pos): Tile[] {
-
-        return [
-            p.y > 0 ? this.getTileAt(new Pos(p.x, p.y - 1)) : -1,
-            p.x < this.width - 1 ? this.getTileAt(new Pos(p.x + 1, p.y)) : -1,
-            p.y < this.height - 1 ? this.getTileAt(new Pos(p.x, p.y + 1)) : -1,
-            p.x > 0 ? this.getTileAt(new Pos(p.x - 1, p.y)) : -1
-        ];
-
-    }
-    getIndexForGrassAt(p: Pos): number {
-        let adj = this.getAdjacentTilesAt(p);
+    getImageIndexForGrassAt(position: Pos): number {
+        let adj = this.map.getAdjacentTilesAt(position);
         let cut = 0;
         for (let i = 0; i < adj.length; i++) {
             cut += Math.pow(2, i) * (TileManager.doesTileCutGrass(adj[i]) ? 1 : 0);
         }
-        return 5 + TileManager.getIndexForForm(cut);
-    }
-    showWalkRange(waypoints: Waypoint[]) {
-        for (let waypoint of waypoints) {
-            TileManager.tileMap.putTile(33 + TileManager.getIndexForForm(waypoint.form), waypoint.position.x, waypoint.position.y, this.interactionLayer);
-        }
-        this.interactionLayerTintProgress = 100;
-        this.interactionLayerTintAnimation = TintAnimation.Decreasing;
-    }
-    hideWalkRange(waypoints: Waypoint[]) {
-        this.interactionLayerTintAnimation = TintAnimation.None;
-        for (let waypoint of waypoints) {
-            TileManager.tileMap.removeTile(waypoint.position.x, waypoint.position.y, this.interactionLayer);
-        }
-    }
-    getAllianceAt(p: Pos): Alliance {
-        for (let building of this.buildings){
-            if (p.match(building.position)) {
-                return building.alliance;
-            }
-        }
-        return Alliance.None;
-    }
-    getOccupiedHouses(): Building[] {
-        let houses: Building[] = [];
-        for (let building of this.buildings){
-            if (!building.castle && building.alliance != Alliance.None) {
-                houses.push(building);
-            }
-        }
-        return houses;
+        if (cut == 8 + 4 + 2 + 1) { return 3; } // all - not supplied
+        if (cut == 8 + 4 + 1) { return 16; } // top bottom left
+        if (cut == 8 + 4 + 2) { return 10; } // right bottom left
+        if (cut == 4 + 2 + 1) { return 17; } // top right bottom
+        if (cut == 8 + 2 + 1) { return 14; } // top right left
+        if (cut == 1 + 8) { return 12; } // top left
+        if (cut == 4 + 8) { return 8; } // bottom left
+        if (cut == 2 + 4) { return 9; } // right bottom
+        if (cut == 1 + 2) { return 13; } // top right
+        if (cut == 1 + 4) { return 15; } // top bottom
+        if (cut == 2 + 8) { return 6; } // right left
+        if (cut == 8) { return 4; } // left
+        if (cut == 4) { return 7; } // bottom
+        if (cut == 2) { return 5; } // right
+        if (cut == 1) { return 11; } // top
+        return 3;
     }
 }

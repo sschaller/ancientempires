@@ -1,28 +1,33 @@
 interface EntityData {
     name: string;
-    cost: number;
+    mov: number;
     atk: number;
     def: number;
-    mov: number;
-    min: number;
     max: number;
-    tile: number;
-    desc: string;
+    min: number;
+    cost: number;
+    battle_positions: IPos[];
+    flags: EntityFlags;
 }
-interface EntityStart {
-    alliance: Alliance;
+enum EntityFlags {
+    None = 0, // Golem, Skeleton
+    Flying = 1,
+    WaterBoost = 2,
+    CanBuy = 4,
+    CanOccupyHouse = 8,
+    CanOccupyCastle = 16,
+    CanRaise = 32,
+    AntiFlying = 64,
+    CanPoison = 128,
+    CanWisp = 256,
+    CantAttackAfterMoving = 512
+}
+interface IEntity {
     type: EntityType;
-    x: number;
-    y: number;
-}
-interface EntityPath {
-    entity: Entity;
-    target: Pos;
-    line: LinePart[];
-    progress: number;
+    alliance: Alliance;
+    position: Pos;
 }
 enum EntityType {
-    King,
     Soldier,
     Archer,
     Lizard,
@@ -32,6 +37,7 @@ enum EntityType {
     Golem,
     Catapult,
     Wyvern,
+    King,
     Skeleton
 }
 enum EntityStatus {
@@ -47,14 +53,8 @@ enum EntityState {
 
 class Entity extends Sprite {
 
-    static animTimer: number = 0;
-    static all: Entity[];
-    static group: Phaser.Group;
-    static pathfinder: Pathfinder;
-    static moving: EntityPath;
-
-    alliance: Alliance;
     type: EntityType;
+    alliance: Alliance;
     position: Pos;
     data: EntityData;
 
@@ -69,53 +69,19 @@ class Entity extends Sprite {
     def_boost: number = 0;
     mov_boost: number = 0;
 
-    static update(steps: number = 1) {
-        Entity.animTimer += steps;
-        if (Entity.animTimer >= 25) {
-            Entity.animTimer = 0;
-            for (let entity of Entity.all) {
-                entity.nextFrame();
-            }
-        }
-        if (!!Entity.moving) {
-            Entity.moving.entity.update(steps);
-        }
-    }
-    static getEntityAt(position: Pos): Entity {
-        for (let entity of Entity.all){
-            if (entity.position.match(position)) {
-                return entity;
-            }
-        }
-        return null;
-    }
-    static loadEntities(entities: EntityStart[]) {
-        for (let start of entities) {
-            Entity.all.push(
-                new Entity(start.alliance, start.type, new Pos(start.x, start.y))
-            );
-        }
-    }
-
-    constructor(alliance: Alliance, type: EntityType, position: Pos, health: number = 10) {
-        super(position.getWorldPosition(), Entity.group, {names: [], ids: [AncientEmpires.ENTITIES[type].tile + AncientEmpires.ENTITY_ALLIANCE_DIFF * (alliance - 1)]});
+    constructor(type: EntityType, alliance: Alliance, position: Pos, group: Phaser.Group) {
+        super(position.getWorldPosition(), group, "unit_icons_" + ((<number> alliance) - 1), [type, type + AncientEmpires.ENTITIES.length]);
 
         this.data = AncientEmpires.ENTITIES[type];
         this.alliance = alliance;
         this.type = type;
         this.position = position;
-        this.health = health;
+
+        this.health = 10;
         this.rank = 0;
         this.ep = 0;
         this.status = 0;
         this.state = EntityState.Ready;
-    }
-    loadSprite() {
-        this.sprite = Sprite.game.add.sprite(this.worldPosition.x, this.worldPosition.y, "tileset", this.frames.ids[0]);
-    }
-    nextFrame() {
-        this.currentFrame = 1 - this.currentFrame;
-        this.sprite.frame = this.frames.ids[0] + this.currentFrame;
     }
     didRankUp(): boolean {
         if (this.rank < 3 && this.ep >= 75 << this.rank) {
@@ -125,7 +91,7 @@ class Entity extends Sprite {
         }
         return false;
     }
-    attack(target: Entity) {
+    attack(target: Entity, map: Map) {
 
         let n: number;
 
@@ -165,7 +131,7 @@ class Entity extends Sprite {
             def -= 1;
         }
 
-        let red_health = Math.floor((atk - (def + Entity.pathfinder.getDefAt(target.position, target)) * (2 / 3)) * this.health / 10);
+        let red_health = Math.floor((atk - (def + map.getDefAt(target.position, target)) * (2 / 3)) * this.health / 10);
         if (red_health > target.health) {
             red_health = target.health;
         }
@@ -195,39 +161,5 @@ class Entity extends Sprite {
     }
     getInfo() {
         return this.data.name + ", alliance " + this.alliance + ": " + this.position.x + " - " + this.position.y;
-    }
-    move(target: Pos, line: LinePart[]) {
-        this.sprite.bringToTop();
-        Entity.moving = {
-            entity: this,
-            target: target,
-            line: line,
-            progress: 0
-        };
-    }
-    update(steps: number = 1) {
-        if (Entity.moving.entity == this) {
-            let current = Entity.moving.line[0];
-            let diff = new Pos(0, 0).move(current.direction);
-
-            Entity.moving.progress += steps;
-
-            this.worldPosition.x = current.position.x * AncientEmpires.TILE_SIZE + diff.x * Entity.moving.progress;
-            this.worldPosition.y = current.position.y * AncientEmpires.TILE_SIZE + diff.y * Entity.moving.progress;
-
-            if (Entity.moving.progress >= current.length * AncientEmpires.TILE_SIZE) {
-                Entity.moving.line.shift();
-                Entity.moving.progress -= current.length * AncientEmpires.TILE_SIZE;
-            }
-            if (Entity.moving.line.length < 1) {
-                // how to undo?
-                this.position = Entity.moving.target;
-                this.worldPosition.x = this.position.x * AncientEmpires.TILE_SIZE;
-                this.worldPosition.y = this.position.y * AncientEmpires.TILE_SIZE;
-
-                Entity.moving = null;
-            }
-            super.update();
-        }
     }
 }

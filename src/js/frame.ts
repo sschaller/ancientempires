@@ -13,14 +13,12 @@ enum FrameAnimation {
     Wire = 8
 }
 class Frame {
-    static game: Phaser.Game;
     static BORDER_SIZE: number = 24;
     static ANIM_STEPS: number = 15;
-    static all: Frame[];
-    static fid: number = 0;
 
-    contentGroup: Phaser.Group;
-    borderGroup: Phaser.Group;
+    group: Phaser.Group;
+    border_group: Phaser.Group;
+    content_group: Phaser.Group;
     graphics: Phaser.Graphics;
 
     reuse_tiles: Phaser.Image[];
@@ -31,6 +29,9 @@ class Frame {
 
     animation: FrameAnimation;
 
+    game_width: number;
+    game_height: number;
+
     width: number;
     height: number;
 
@@ -39,230 +40,170 @@ class Frame {
     speed: FrameRect;
     acc: FrameRect;
 
-    fid: number = 0;
-
-    static getTileNameForDirection(dir: Direction): string {
-        // suffix of the tile name is already the int value of dir
-        return "menu/" + dir;
-    }
-
-    static add(width: number, height: number, align: Direction, border: Direction, anim_dir?: Direction) {
-        let frame = new Frame(width, height, align, border, anim_dir);
-        frame.fid = Frame.fid;
-        Frame.fid++;
-        Frame.all.push(frame);
-        return frame;
-    }
-    static destroy(frame: Frame): boolean {
-        frame.destroy();
-        for (let i = 0; i < Frame.all.length; i++) {
-            if (Frame.all[i].fid === frame.fid) {
-                Frame.all.splice(i, 1);
-                return true;
-            }
-        }
-        return false;
-    }
-    static update(steps: number) {
-        for (let frame of Frame.all) {
-            frame.update(steps);
-        }
-    }
     static getRect(x: number, y: number, width: number, height: number): FrameRect {
         return {x: x, y: y, width: width, height: height};
     }
     static copyRect(fr: FrameRect): FrameRect {
         return {x: fr.x, y: fr.y, width: fr.width, height: fr.height};
     }
+    private static getTileForDirection(direction: Direction): number {
+        switch (direction) {
+            case Direction.Up:
+                return 4;
+            case Direction.Up | Direction.Right:
+                return 1;
+            case Direction.Right:
+                return 7;
+            case Direction.Right | Direction.Down:
+                return 3;
+            case Direction.Down:
+                return 5;
+            case Direction.Down | Direction.Left:
+                return 2;
+            case Direction.Left:
+                return 6;
+        }
+        return 0;
+    }
 
-    constructor(width: number, height: number, align: Direction, border: Direction, anim_dir?: Direction) {
+    constructor(width: number, height: number, group: Phaser.Group, align: Direction, border: Direction, anim_dir?: Direction) {
+
+        this.align = align;
+        this.animation_direction = typeof anim_dir != "undefined" ? anim_dir : align;
+        this.border = border;
+
+
+        this.group = group;
+
+        this.border_group = this.group.game.add.group();
+        this.group.add(this.border_group);
+        this.border_group.visible = false;
+        this.graphics = this.group.game.add.graphics(0, 0, this.border_group);
+
+        this.content_group = this.group.game.add.group();
+        this.group.add(this.content_group);
+        this.content_group.visible = false;
+
+
+        this.width = width;
+        this.height = height;
+        this.game_width = this.group.game.width;
+        this.game_height = this.group.game.height;
 
         this.reuse_tiles = [];
 
-        this.align = align;
-        this.animation_direction = !!anim_dir ? anim_dir : align;
-        this.border = border;
-
-        this.contentGroup = Frame.game.add.group();
-        this.contentGroup.visible = false;
-
-        this.borderGroup = Frame.game.add.group();
-        this.borderGroup.visible = false;
-
-        this.graphics = Frame.game.add.graphics(0, 0, this.borderGroup);
-
         this.animation = FrameAnimation.None;
-        this.width = width;
-        this.height = height;
+        this.current = this.getRetractedRect();
 
     }
 
     getContentGroup() {
-        return this.contentGroup;
+        return this.content_group;
     }
 
     show(animate: boolean = false) {
+        this.animation = FrameAnimation.None;
+        this.target = this.getAlignmentRect();
 
-        this.target = Frame.getRect(0, 0, this.width, this.height);
-
-        // calculate the offset using the alignment
-        if ((this.align & Direction.Left) != 0) {
-            this.target.x = 0;
-        } else if ((this.align & Direction.Right) != 0) {
-            this.target.x = Frame.game.width - this.target.width;
-        } else {
-            this.target.x = Math.floor((Frame.game.width - this.target.width) / 2);
-        }
-        if ((this.align & Direction.Up) != 0) {
-            this.target.y = 0;
-        } else if ((this.align & Direction.Down) != 0) {
-            this.target.y = Frame.game.height - this.target.height;
-        } else {
-            this.target.y = Math.floor((Frame.game.height - this.target.height) / 2);
-        }
-
-        this.current = Frame.copyRect(this.target);
         if (animate) {
             // calculate starting offset using the anim_direction
             this.animation = FrameAnimation.Show;
-            if ((this.animation_direction & Direction.Left) != 0) {
-                this.current.x = -this.current.width;
-            }
-            if ((this.animation_direction & Direction.Right) != 0) {
-                this.current.x = Frame.game.width;
-            }
-            if ((this.animation_direction & Direction.Up) != 0) {
-                this.current.y = -this.current.height;
-            }
-            if ((this.animation_direction & Direction.Down) != 0) {
-                this.current.y = Frame.game.height;
-            }
             if (this.animation_direction == Direction.None) {
                 this.animation |= FrameAnimation.Wire;
-                this.current.x = Math.floor(Frame.game.width / 2);
-                this.current.y = Math.floor(Frame.game.height / 2);
-                this.current.width = 0;
-                this.current.height = 0;
             }
             this.calculateSpeed();
+        } else {
+            this.current = Frame.copyRect(this.target);
         }
 
         this.updateOffset();
-        if ((this.animation & FrameAnimation.Wire) == 0) {
-            this.updateFrame(this.target.width, this.target.height);
-            this.contentGroup.visible = true;
+        this.border_group.visible = true;
+        if ((this.animation & FrameAnimation.Wire) != 0) {
+            this.removeFrame();
+            this.content_group.visible = false;
+        } else {
+            this.drawFrame(this.width, this.height);
+            this.content_group.visible = true;
         }
-
-        Frame.game.world.bringToTop(this.contentGroup);
-        Frame.game.world.bringToTop(this.borderGroup);
-        this.borderGroup.visible = true;
-
     }
     hide(animate: boolean = false) {
+        this.animation = FrameAnimation.None;
+        this.target = this.getRetractedRect();
+
         if (!animate) {
-            this.borderGroup.visible = false;
-            this.contentGroup.visible = false;
+            this.current = Frame.copyRect(this.target);
+            this.border_group.visible = false;
+            this.content_group.visible = false;
             this.removeTiles();
+            this.updateOffset();
             return;
         }
-        // calculate the target position using the animation direction
+
         this.animation = FrameAnimation.Hide;
-        this.target = Frame.copyRect(this.current);
-        if ((this.animation_direction & Direction.Left) != 0) {
-            this.target.x = -this.target.width;
-        }
-        if ((this.animation_direction & Direction.Right) != 0) {
-            this.target.x = Frame.game.width;
-        }
-        if ((this.animation_direction & Direction.Up) != 0) {
-            this.target.y = -this.target.height;
-        }
-        if ((this.animation_direction & Direction.Down) != 0) {
-            this.target.y = Frame.game.height;
-        }
         if (this.animation_direction == Direction.None) {
             this.animation |= FrameAnimation.Wire;
-            this.removeTiles();
-
-            this.target.x = Math.floor(Frame.game.width / 2);
-            this.target.y = Math.floor(Frame.game.height / 2);
-            this.target.width = 0;
-            this.target.height = 0;
+            this.removeFrame();
         }
         this.calculateSpeed();
     }
+
     updateSize(width: number, height: number, animate: boolean = false) {
-        // fuck
-        // adjust offset if alignment is top or left, so no difference at first notice
-
-        this.width = width;
-        this.height = height;
-
-        if (animate) {
-            this.animation = FrameAnimation.Change;
-            if (this.animation_direction == Direction.None) {
-                this.animation |= FrameAnimation.Wire;
-            } else {
-                // take the biggest rect possible
-                width = Math.max(width, this.current.width);
-                height = Math.max(height, this.current.height);
-            }
-        }
-
-        // calculate the offset using the alignment
-        if ((this.align & Direction.Left) != 0) {
-            this.current.x -= width - this.current.width;
-            this.target.x -= width - this.width;
-        } else if ((this.align & Direction.Right) != 0) {
-            this.target.x = Frame.game.width - this.width;
-        } else {
-            this.target.x = Math.floor((Frame.game.width - this.width) / 2);
-        }
-        if ((this.align & Direction.Up) != 0) {
-            this.current.y -= height - this.current.height;
-            this.target.y -= height - this.height;
-        } else if ((this.align & Direction.Down) != 0) {
-            this.target.y = Frame.game.height - this.height;
-        } else {
-            this.target.y = Math.floor((Frame.game.height - this.height) / 2);
-        }
-
-        if ((this.animation & FrameAnimation.Wire) == 0) {
-            this.current.width = width;
-            this.current.height = height;
-        }
-        this.target.width = width;
-        this.target.height = height;
-
-        console.log(width + " - " + height);
-        console.log(this.current);
-        console.log(this.target);
-
-        if (animate) {
-            this.calculateSpeed();
-        } else {
-            this.current.x = this.target.x;
-            this.current.y = this.target.y;
-        }
-
-        this.updateOffset();
-        if ((this.animation & FrameAnimation.Wire) == 0) {
-            this.updateFrame(width, height);
-        } else {
-            this.removeTiles();
-        }
-
-    }
-    update(steps: number) {
-
-        if (this.animation == FrameAnimation.None) {
+        this.animation = FrameAnimation.None;
+        if (!animate) {
+            this.width = width;
+            this.height = height;
+            this.target = this.getAlignmentRect();
+            this.current = Frame.copyRect(this.target);
+            this.updateOffset();
+            this.drawFrame(width, height);
             return;
         }
 
+        let old_width = this.width;
+        let old_height = this.height;
+        this.width = width;
+        this.height = height;
+
+        this.animation = FrameAnimation.Change;
+        if (this.animation_direction == Direction.None) {
+            this.animation |= FrameAnimation.Wire;
+        } else {
+            // take the biggest rect possible
+            width = Math.max(width, old_width);
+            height = Math.max(height, old_height);
+
+            this.current.width = width;
+            this.current.height = height;
+        }
+
+        this.target = this.getAlignmentRect();
+
+        // this.current is the old rect (offset & size)
+        // update this.current so the same portion of the frame is rendered, although it changed in size
+        // change target to alignment position for changed rect
+        if ((this.align & Direction.Left) != 0) {
+            this.current.x -= width - old_width;
+            this.target.x -= width - this.width;
+        }
+        if ((this.align & Direction.Up) != 0) {
+            this.current.y -= height - old_height;
+            this.target.y -= height - this.height;
+        }
+
+        this.updateOffset();
+        if ((this.animation & FrameAnimation.Wire) != 0) {
+            this.removeFrame();
+        } else {
+            this.drawFrame(width, height);
+        }
+        this.calculateSpeed();
+    }
+    update(steps: number) {
+
+        if (this.animation == FrameAnimation.None) { return; }
+
         let finished_x = this.addGain("x", steps);
         let finished_y = this.addGain("y", steps);
-
-        console.log((finished_x ? 1 : 0) + " - " + (finished_y ? 1 : 0));
 
         let finished_width = true;
         let finished_height = true;
@@ -273,27 +214,26 @@ class Frame {
         }
 
         if (finished_x && finished_y && finished_width && finished_height) {
-            console.log("finished");
             if ((this.animation & FrameAnimation.Wire) != 0) {
                 this.graphics.clear();
                 if ((this.animation & FrameAnimation.Hide) == 0) {
-                    this.updateFrame(this.target.width, this.target.height);
-                    this.contentGroup.visible = true;
+                    this.drawFrame(this.width, this.height);
+                    this.content_group.visible = true;
                 }
             }
             if ((this.animation & FrameAnimation.Change) != 0) {
-                // TODO: remove tiles out of sight
-                this.current.width = this.width;
-                this.current.height = this.height;
+                // update current offset and remove tiles out of sight
+                this.target.width = this.width;
+                this.target.height = this.height;
                 if ((this.align & Direction.Left) != 0) {
-                    this.current.x = 0;
+                    this.target.x = 0;
                 }
                 if ((this.align & Direction.Up) != 0) {
-                    this.current.y = 0;
+                    this.target.y = 0;
                 }
-                this.target = Frame.copyRect(this.current);
+                this.current = Frame.copyRect(this.target);
                 this.updateOffset();
-                this.updateFrame(this.width, this.height);
+                this.drawFrame(this.width, this.height);
             }
             if ((this.animation & FrameAnimation.Hide) != 0) {
                 this.hide();
@@ -309,8 +249,49 @@ class Frame {
         this.updateOffset();
     }
     destroy() {
-        this.contentGroup.destroy(true);
-        this.borderGroup.destroy(true);
+        this.border_group.destroy(true);
+        this.content_group.destroy(true);
+    }
+
+    private getAlignmentRect(): FrameRect {
+        // calculate the offset using the alignment
+        let rect = Frame.getRect(0, 0, this.width, this.height);
+        if ((this.align & Direction.Left) != 0) {
+            rect.x = 0;
+        } else if ((this.align & Direction.Right) != 0) {
+            rect.x = this.game_width - this.width;
+        } else {
+            rect.x = Math.floor((this.game_width - this.width) / 2);
+        }
+        if ((this.align & Direction.Up) != 0) {
+            rect.y = 0;
+        } else if ((this.align & Direction.Down) != 0) {
+            rect.y = this.game_height - this.height;
+        } else {
+            rect.y = Math.floor((this.game_height - this.height) / 2);
+        }
+        return rect;
+    }
+
+    private getRetractedRect(): FrameRect {
+        if (this.animation_direction == Direction.None) {
+            return Frame.getRect(Math.floor(this.game_width / 2), Math.floor(this.game_height / 2), 0, 0);
+        }
+
+        let rect = this.getAlignmentRect();
+        if ((this.animation_direction & Direction.Left) != 0) {
+            rect.x = -this.width;
+        }
+        if ((this.animation_direction & Direction.Right) != 0) {
+            rect.x = this.game_width;
+        }
+        if ((this.animation_direction & Direction.Up) != 0) {
+            rect.y = -this.height;
+        }
+        if ((this.animation_direction & Direction.Down) != 0) {
+            rect.y = this.game_height;
+        }
+        return rect;
     }
     private updateOffset() {
         let x = this.current.x;
@@ -319,18 +300,18 @@ class Frame {
         let c_x = 0;
         let c_y = 0;
         if ((this.border & Direction.Left) != 0) {
-            c_x += 6;
+            c_x = 6;
         }
         if ((this.border & Direction.Up) != 0) {
-            c_y += 6;
+            c_y = 6;
         }
 
-        this.borderGroup.x = x;
-        this.borderGroup.y = y;
-        this.contentGroup.x = c_x;
-        this.contentGroup.y = c_y;
+        this.group.x = x;
+        this.group.y = y;
+        this.content_group.x = c_x;
+        this.content_group.y = c_y;
     }
-    private updateFrame(width: number, height: number) {
+    private drawFrame(width: number, height: number) {
 
         let c_width = width;
         let c_height = height;
@@ -346,8 +327,8 @@ class Frame {
         if ((this.border & Direction.Down) != 0) {
             c_height -= 6;
         }
-        this.contentGroup.width = c_width;
-        this.contentGroup.height = c_height;
+        this.content_group.width = c_width;
+        this.content_group.height = c_height;
 
         let show_tiles_x = Math.ceil(width / Frame.BORDER_SIZE) - 2;
         let show_tiles_y = Math.ceil(height / Frame.BORDER_SIZE) - 2;
@@ -398,6 +379,10 @@ class Frame {
         this.removeTiles();
         this.reuse_tiles = tiles;
     }
+    private removeFrame() {
+        this.graphics.clear();
+        this.removeTiles();
+    }
     private drawBorderTile(x: number, y: number, direction: Direction) {
         let reuse: Phaser.Image;
 
@@ -407,10 +392,9 @@ class Frame {
             reuse.x = x;
             reuse.y = y;
         } else {
-            reuse = Frame.game.add.image(x, y, "sprites", null, this.borderGroup);
+            reuse = this.group.game.add.image(x, y, "menu", null, this.border_group);
         }
-        reuse.tint = 0xffffff * Math.random();
-        reuse.frameName = Frame.getTileNameForDirection(direction);
+        reuse.frame = Frame.getTileForDirection(direction);
         return reuse;
     }
     private addGain(var_name: string, steps: number) {

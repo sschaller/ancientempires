@@ -1,14 +1,18 @@
-class Pos {
+interface IPos {
+    x: number;
+    y: number;
+}
+class Pos implements IPos {
     x: number;
     y: number;
     constructor(x: number, y: number) {
         this.x = x;
         this.y = y;
     }
-    match(p: Pos) {
+    match(p: IPos) {
         return (!!p && this.x == p.x && this.y == p.y);
     }
-    copy(direction: Direction): Pos {
+    copy(direction: Direction = Direction.None): Pos {
         switch (direction) {
             case Direction.Up:
                 return new Pos(this.x, this.y - 1);
@@ -52,4 +56,11 @@ class Pos {
     getInfo() {
         return "{x: " + this.x + ", y: " + this.y + "}";
     }
+}
+enum Direction {
+    None = 0,
+    Up = 1,
+    Right = 2,
+    Down = 4,
+    Left = 8
 }

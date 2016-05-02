@@ -28,11 +28,14 @@ class Loader extends Phaser.State {
         PNGLoader.loadSpriteSheet(waiter, "buildings", 24, 24, 3, 0);
         PNGLoader.loadSpriteSheet(waiter, "buildings", 24, 24, 3, 1);
         PNGLoader.loadSpriteSheet(waiter, "buildings", 24, 24, 3, 2);
-        PNGLoader.loadSpriteSheet(waiter, "unit_icons", 24, 24, 0, 0);
         PNGLoader.loadSpriteSheet(waiter, "unit_icons", 24, 24, 0, 1);
+        PNGLoader.loadSpriteSheet(waiter, "unit_icons", 24, 24, 0, 2);
         PNGLoader.loadSpriteSheet(waiter, "cursor", 26, 26);
         PNGLoader.loadSpriteSheet(waiter, "b_smoke");
         PNGLoader.loadSpriteSheet(waiter, "menu");
+        PNGLoader.loadSpriteSheet(waiter, "portrait");
+        PNGLoader.loadSpriteSheet(waiter, "chars");
+        PNGLoader.loadImage(waiter, "gold");
 
         waiter.await();
 

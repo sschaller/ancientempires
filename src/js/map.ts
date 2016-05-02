@@ -55,7 +55,7 @@ class Map {
     static getDefForTile(tile: Tile, entity: Entity): number {
         if (tile == Tile.Mountain || tile == Tile.House || tile == Tile.Castle) { return 3; }
         if (tile == Tile.Forest || tile == Tile.Hill) { return 2; }
-        if (tile == Tile.Water && entity.type == EntityType.Lizard) { return 2; }
+        if (tile == Tile.Water && entity && entity.type == EntityType.Lizard) { return 2; }
         if (tile == Tile.Grass) { return 1; }
         return 0;
     }

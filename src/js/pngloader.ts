@@ -102,7 +102,22 @@ class PNGLoader {
         }
     }
 
-    static createVariation(buffer: ArrayBuffer, variation: number): ArrayBuffer {
+    static loadImage(waiter: PNGWaiter, name: string) {
+        let png_buffer: ArrayBuffer = AncientEmpires.game.cache.getBinary(name + ".png");
+        let img = new Image();
+
+        waiter.add();
+        img.onload = () => {
+            AncientEmpires.game.cache.addImage(name, null, img);
+            waiter.ret();
+        };
+        img.src = "data:image/png;base64," + PNGLoader.bufferToBase64(new Uint8Array(png_buffer));
+    }
+
+    static createVariation(buffer: ArrayBuffer, variation?: number): ArrayBuffer {
+
+        if (typeof variation == "undefined") { return buffer; }
+
         buffer = buffer.slice(0); // copy buffer (otherwise we modify original data, same as in cache)
         let data = new DataView(buffer);
 
@@ -132,13 +147,13 @@ class PNGLoader {
 
             if (blue > red && blue > green) {
                 // blue color
-                if (variation == 1) {
+                if (variation == 2) {
                     // change to red color
                     let tmp = red;
                     red = blue;
                     blue = tmp;
                     green /= 2;
-                }else if (variation == 2) {
+                }else if (variation == 0) {
                     // decolorize
                     red = blue;
                     green = blue;

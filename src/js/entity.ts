@@ -70,7 +70,7 @@ class Entity extends Sprite {
     mov_boost: number = 0;
 
     constructor(type: EntityType, alliance: Alliance, position: Pos, group: Phaser.Group) {
-        super(position.getWorldPosition(), group, "unit_icons_" + ((<number> alliance) - 1), [type, type + AncientEmpires.ENTITIES.length]);
+        super(position.getWorldPosition(), group, "unit_icons_" + (<number> alliance), [type, type + AncientEmpires.ENTITIES.length]);
 
         this.data = AncientEmpires.ENTITIES[type];
         this.alliance = alliance;

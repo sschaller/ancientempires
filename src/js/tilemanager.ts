@@ -1,7 +1,7 @@
 enum Alliance {
-    None,
-    Blue,
-    Red
+    None = 0,
+    Blue = 1,
+    Red = 2
 }
 class TileManager {
 
@@ -20,15 +20,53 @@ class TileManager {
         return (tile == Tile.Path || tile == Tile.Water || tile == Tile.Bridge);
     }
 
+    static getImageIndexForObjectTile(tile: Tile): number {
+
+        if (tile == Tile.Mountain) {
+            return 0;
+        }
+        if (tile == Tile.Forest) {
+            return 1;
+        }
+        if (tile == Tile.Hill) {
+            return 2;
+        }
+        if (tile == Tile.House) {
+            return AncientEmpires.NUMBER_OF_TILES;
+        }
+        if (tile == Tile.Castle) {
+            return AncientEmpires.NUMBER_OF_TILES + 1;
+        }
+        return -1;
+    }
+
+    static getBaseImageIndexForTile(tile: Tile): number {
+        switch (tile) {
+            case Tile.Water:
+                return 21;
+            case Tile.Bridge:
+                return 19;
+            case Tile.Path:
+                return 18;
+            case Tile.Hill:
+            case Tile.Forest:
+            case Tile.Mountain:
+            case Tile.House:
+            case Tile.Castle:
+                return TileManager.getImageIndexForObjectTile(tile);
+        }
+        return 3;
+    }
+
     constructor(map: Map, tilemap: Phaser.Tilemap, tilemap_group: Phaser.Group) {
         this.map = map;
         this.tilemap = tilemap;
         this.group = tilemap_group;
 
         this.tilemap.addTilesetImage("tiles0", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, 0);
-        this.tilemap.addTilesetImage("buildings_2", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES);
-        this.tilemap.addTilesetImage("buildings_0", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES + 3);
-        this.tilemap.addTilesetImage("buildings_1", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES + 6);
+        this.tilemap.addTilesetImage("buildings_0", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES);
+        this.tilemap.addTilesetImage("buildings_1", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES + 3);
+        this.tilemap.addTilesetImage("buildings_2", null, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, null, null, AncientEmpires.NUMBER_OF_TILES + 6);
 
         this.backgroundLayer = this.tilemap.create("background", this.map.width, this.map.height, AncientEmpires.TILE_SIZE, AncientEmpires.TILE_SIZE, this.group);
         this.backgroundLayer.resizeWorld();
@@ -55,26 +93,6 @@ class TileManager {
 
     }
 
-    getImageIndexForObjectTile(tile: Tile): number {
-
-        if (tile == Tile.Mountain) {
-            return 0;
-        }
-        if (tile == Tile.Forest) {
-            return 1;
-        }
-        if (tile == Tile.Hill) {
-            return 2;
-        }
-        if (tile == Tile.House) {
-            return AncientEmpires.NUMBER_OF_TILES;
-        }
-        if (tile == Tile.Castle) {
-            return AncientEmpires.NUMBER_OF_TILES + 1;
-        }
-        return -1;
-    }
-
     updateWater() {
         let oldState = this.waterState;
         this.waterState = 1 - this.waterState;
@@ -85,7 +103,7 @@ class TileManager {
     drawTileAt(position: Pos) {
         this.tilemap.putTile(this.getImageIndexForBackgroundAt(position), position.x, position.y, this.backgroundLayer);
         let tile = this.map.getTileAt(position);
-        let obj = this.getImageIndexForObjectTile(tile);
+        let obj = TileManager.getImageIndexForObjectTile(tile);
         if (obj >= 0) {
             if (tile == Tile.House || tile == Tile.Castle) {
                 let alliance = this.map.getAllianceAt(position);

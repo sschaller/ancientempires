@@ -20,15 +20,19 @@ class AEFont {
             return 0;
         }
     }
-    constructor(x: number, y: number, text: string, group: Phaser.Group) {
+    constructor(x: number, y: number, group: Phaser.Group, text?: string) {
         this.x = x;
         this.y = y;
-        this.text = text;
+        this.text = text || "";
         this.group = group;
         this.letters = [];
         this.draw();
     }
-    draw() {
+    setText(text: string) {
+        this.text = text;
+        this.draw();
+    }
+    private draw() {
         let l: Phaser.Image[] = [];
         let x = this.x;
         for (let i = 0; i < this.text.length; i++) {
@@ -39,10 +43,16 @@ class AEFont {
             if (this.letters.length > 0) {
                 image = this.letters.shift();
             }else {
-                image = AncientEmpires.game.add.image(x, this.y, "");
+                image = AncientEmpires.game.add.image(x, this.y, "chars", null, this.group);
             }
-
-
+            image.frame = index;
+            l.push(image);
+            x += image.width;
         }
+        while (this.letters.length > 0) {
+            let letter = this.letters.shift();
+            letter.destroy();
+        }
+        this.letters = l;
     }
 }

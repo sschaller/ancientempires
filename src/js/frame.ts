@@ -10,7 +10,9 @@ enum FrameAnimation {
     Show = 1,
     Hide = 2,
     Change = 4,
-    Wire = 8
+    Wire = 8,
+    Destroy = 16,
+    Update = 32
 }
 class Frame {
     static BORDER_SIZE: number = 24;
@@ -39,6 +41,10 @@ class Frame {
     target: FrameRect;
     speed: FrameRect;
     acc: FrameRect;
+    private new_align: Direction;
+    private new_border: Direction;
+    private new_animation_direction: Direction;
+    private new_animate: boolean;
 
     static getRect(x: number, y: number, width: number, height: number): FrameRect {
         return {x: x, y: y, width: width, height: height};
@@ -66,39 +72,33 @@ class Frame {
         return 0;
     }
 
-    constructor(width: number, height: number, group: Phaser.Group, align: Direction, border: Direction, anim_dir?: Direction) {
+    constructor() {
+        this.reuse_tiles = [];
+    }
 
+    initialize(width: number, height: number, group: Phaser.Group, align: Direction, border: Direction, anim_dir?: Direction) {
         this.align = align;
         this.animation_direction = typeof anim_dir != "undefined" ? anim_dir : align;
         this.border = border;
 
-
         this.group = group;
-
-        this.border_group = this.group.game.add.group();
-        this.group.add(this.border_group);
-        this.border_group.visible = false;
-        this.graphics = this.group.game.add.graphics(0, 0, this.border_group);
 
         this.content_group = this.group.game.add.group();
         this.group.add(this.content_group);
         this.content_group.visible = false;
+        this.graphics = this.group.game.add.graphics(0, 0, this.content_group);
 
+        this.border_group = this.group.game.add.group();
+        this.group.add(this.border_group);
+        this.border_group.visible = false;
 
-        this.width = width;
-        this.height = height;
         this.game_width = this.group.game.width;
         this.game_height = this.group.game.height;
-
-        this.reuse_tiles = [];
+        this.width = width;
+        this.height = height;
 
         this.animation = FrameAnimation.None;
         this.current = this.getRetractedRect();
-
-    }
-
-    getContentGroup() {
-        return this.content_group;
     }
 
     show(animate: boolean = false) {
@@ -126,7 +126,7 @@ class Frame {
             this.content_group.visible = true;
         }
     }
-    hide(animate: boolean = false) {
+    hide(animate: boolean = false, destroy_on_finish: boolean = false, update_on_finish: boolean = false) {
         this.animation = FrameAnimation.None;
         this.target = this.getRetractedRect();
 
@@ -136,10 +136,19 @@ class Frame {
             this.content_group.visible = false;
             this.removeTiles();
             this.updateOffset();
+            if (destroy_on_finish) {
+                this.destroy();
+            }
             return;
         }
 
         this.animation = FrameAnimation.Hide;
+        if (destroy_on_finish) {
+            this.animation |= FrameAnimation.Destroy;
+        }
+        if (update_on_finish) {
+            this.animation |= FrameAnimation.Update;
+        }
         if (this.animation_direction == Direction.None) {
             this.animation |= FrameAnimation.Wire;
             this.removeFrame();
@@ -148,6 +157,14 @@ class Frame {
     }
 
     updateSize(width: number, height: number, animate: boolean = false) {
+
+        if (this.width == width && this.height == height) { return; }
+        if ((this.animation & FrameAnimation.Update) != 0) {
+            this.width = width;
+            this.height = height;
+            return;
+        }
+
         this.animation = FrameAnimation.None;
         if (!animate) {
             this.width = width;
@@ -198,6 +215,19 @@ class Frame {
         }
         this.calculateSpeed();
     }
+
+    updateDirections(align: Direction, border: Direction, anim_direction: Direction, animate: boolean = false) {
+
+        if (this.new_align === align && this.new_border == border && this.new_animation_direction == anim_direction && this.new_animate == animate) { return; }
+
+        this.new_align = align;
+        this.new_border = border;
+        this.new_animation_direction = anim_direction;
+        this.new_animate = animate;
+
+        this.hide(true, false, true);
+    }
+
     update(steps: number) {
 
         if (this.animation == FrameAnimation.None) { return; }
@@ -236,6 +266,14 @@ class Frame {
                 this.drawFrame(this.width, this.height);
             }
             if ((this.animation & FrameAnimation.Hide) != 0) {
+                if ((this.animation & FrameAnimation.Destroy) != 0) {
+                    this.destroy();
+                    return;
+                }
+                if ((this.animation & FrameAnimation.Update) != 0) {
+                    this.applyDirections();
+                    return;
+                }
                 this.hide();
             }
             this.animation = FrameAnimation.None;
@@ -251,6 +289,14 @@ class Frame {
     destroy() {
         this.border_group.destroy(true);
         this.content_group.destroy(true);
+    }
+
+    private applyDirections() {
+        this.align = this.new_align;
+        this.border = this.new_border;
+        this.animation_direction = this.new_animation_direction;
+        this.current = this.getRetractedRect();
+        this.show(this.new_animate);
     }
 
     private getAlignmentRect(): FrameRect {
@@ -306,10 +352,10 @@ class Frame {
             c_y = 6;
         }
 
-        this.group.x = x;
-        this.group.y = y;
-        this.content_group.x = c_x;
-        this.content_group.y = c_y;
+        this.border_group.x = x;
+        this.border_group.y = y;
+        this.content_group.x = x + c_x;
+        this.content_group.y = y + c_y;
     }
     private drawFrame(width: number, height: number) {
 
@@ -327,8 +373,8 @@ class Frame {
         if ((this.border & Direction.Down) != 0) {
             c_height -= 6;
         }
-        this.content_group.width = c_width;
-        this.content_group.height = c_height;
+        // this.content_group.width = c_width;
+        // this.content_group.height = c_height;
 
         let show_tiles_x = Math.ceil(width / Frame.BORDER_SIZE) - 2;
         let show_tiles_y = Math.ceil(height / Frame.BORDER_SIZE) - 2;

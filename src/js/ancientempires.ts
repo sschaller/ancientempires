@@ -31,8 +31,8 @@ class AncientEmpires {
     mainMenu: MainMenu;
     controller: GameController;
 
-    width: number = 360;
-    height: number =  360;
+    width: number = 176;
+    height: number =  204;
 
     constructor(div_id: string) {
         AncientEmpires.game = new Phaser.Game(this.width, this.height, Phaser.AUTO, div_id, this);

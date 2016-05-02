@@ -1,15 +1,11 @@
 class FrameManager {
     frames: Frame[];
-    group: Phaser.Group;
 
-    constructor(group: Phaser.Group) {
-        this.group = group;
+    constructor() {
         this.frames = [];
     }
-    addFrame(width: number, height: number, align: Direction, border: Direction, anim_dir?: Direction): Frame {
-        let frame = new Frame(width, height, this.group, align, border, anim_dir);
+    addFrame(frame: Frame) {
         this.frames.push(frame);
-        return frame;
     }
     removeFrame(frame: Frame) {
         for (let i = 0; i < this.frames.length; i++) {

@@ -11,7 +11,7 @@ interface EntityData {
 }
 enum EntityFlags {
     None = 0, // Golem, Skeleton
-    Flying = 1,
+    CanFly = 1,
     WaterBoost = 2,
     CanBuy = 4,
     CanOccupyHouse = 8,
@@ -62,8 +62,11 @@ class Entity extends Sprite {
     rank: number;
     ep: number;
 
+    death_count: number;
+
     status: EntityStatus;
     state: EntityState;
+    icon_moved: Phaser.Image;
 
     atk_boost: number = 0;
     def_boost: number = 0;
@@ -77,11 +80,25 @@ class Entity extends Sprite {
         this.type = type;
         this.position = position;
 
+        this.death_count = 0;
+
         this.health = 10;
         this.rank = 0;
         this.ep = 0;
         this.status = 0;
         this.state = EntityState.Ready;
+
+        this.icon_moved = group.game.add.image(0, 0, "chars", 4, group);
+        this.icon_moved.visible = false;
+    }
+    isDead(): boolean {
+        return this.health == 0;
+    }
+    hasFlag(flag: EntityFlags) {
+        return (this.data.flags & flag) != 0;
+    }
+    getDistanceToEntity(entity: Entity): number {
+        return Math.abs(entity.position.x - this.position.x) + Math.abs(entity.position.y - this.position.y);
     }
     didRankUp(): boolean {
         if (this.rank < 3 && this.ep >= 75 << this.rank) {
@@ -161,5 +178,22 @@ class Entity extends Sprite {
     }
     getInfo() {
         return this.data.name + ", alliance " + this.alliance + ": " + this.position.x + " - " + this.position.y;
+    }
+
+    updateState(state: EntityState, show: boolean) {
+
+        this.state = state;
+
+        let show_icon = (show && state == EntityState.Moved);
+
+        this.icon_moved.x = this.sprite.x + AncientEmpires.TILE_SIZE - 7;
+        this.icon_moved.y = this.sprite.y + AncientEmpires.TILE_SIZE - 7;
+        this.icon_moved.visible = show_icon;
+        this.icon_moved.bringToTop();
+    }
+
+    getMovement(): number {
+        // if poisoned, less -> apply here
+        return this.data.mov;
     }
 }

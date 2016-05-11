@@ -10,7 +10,11 @@ class Loader extends Phaser.State {
     }
 
     preload() {
+        this.game.load.spritesheet("font7", "img/font7.png", 6, 7);
         this.game.load.binary("data", "data/1.pak", function(key: string, data: any): Uint8Array {
+            return new Uint8Array(data);
+        });
+        this.game.load.binary("lang", "data/lang.dat", function(key: string, data: any): Uint8Array {
             return new Uint8Array(data);
         });
     }
@@ -19,6 +23,7 @@ class Loader extends Phaser.State {
         this.unpackResourceData();
         this.loadEntityData();
         this.loadMapTilesProp();
+        this.unpackLangData();
 
         let waiter = new PNGWaiter(() => {
             this.game.state.start("MainMenu", false, false, name);
@@ -36,13 +41,14 @@ class Loader extends Phaser.State {
         PNGLoader.loadSpriteSheet(waiter, "portrait");
         PNGLoader.loadSpriteSheet(waiter, "chars");
         PNGLoader.loadImage(waiter, "gold");
+        PNGLoader.loadImage(waiter, "pointer");
 
         waiter.await();
 
 
     }
 
-    unpackResourceData() {
+    private unpackResourceData() {
         let array: Uint8Array = this.game.cache.getBinary("data");
         let data = new DataView(array.buffer);
 
@@ -71,7 +77,7 @@ class Loader extends Phaser.State {
             index += entry.size;
         }
     }
-    loadEntityData() {
+    private loadEntityData() {
         let buffer: ArrayBuffer = this.game.cache.getBinary("units.bin");
 
         let data: DataView = new DataView(buffer);
@@ -105,7 +111,7 @@ class Loader extends Phaser.State {
             AncientEmpires.ENTITIES.push(entity);
         }
     }
-    loadMapTilesProp() {
+    private loadMapTilesProp() {
         let buffer: ArrayBuffer = this.game.cache.getBinary("tiles0.prop");
         let data: DataView = new DataView(buffer);
         let index = 0;
@@ -116,6 +122,29 @@ class Loader extends Phaser.State {
         AncientEmpires.TILES_PROP = [];
         for (let i = 0; i < length; i++) {
             AncientEmpires.TILES_PROP.push(<Tile> data.getUint8(index++));
+        }
+
+    }
+    private unpackLangData() {
+        let array: Uint8Array = this.game.cache.getBinary("lang");
+        let data: DataView = new DataView(array.buffer);
+
+        let index = 0;
+
+        let number = data.getUint32(index);
+        index += 4;
+
+        AncientEmpires.LANG = [];
+
+        for (let i = 0; i < number; i++){
+            let len = data.getUint16(index);
+            index += 2;
+
+            let text = "";
+            for (let j = 0; j < len; j++) {
+                text += String.fromCharCode(data.getUint8(index++));
+            }
+            AncientEmpires.LANG.push(text);
         }
 
     }

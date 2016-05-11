@@ -50,7 +50,7 @@ class SmokeManager {
 
         for (let smoke of this.smoke) {
             smoke.setFrame(this.anim_state);
-            smoke.worldPosition.y = smoke.position.y * AncientEmpires.TILE_SIZE - this.anim_offset - 2;
+            smoke.world_position.y = smoke.position.y * AncientEmpires.TILE_SIZE - this.anim_offset - 2;
             smoke.update();
         }
     }

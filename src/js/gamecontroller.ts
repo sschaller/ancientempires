@@ -1,5 +1,14 @@
-class GameController extends Phaser.State {
+enum GameContext {
+    Notification,
+    Menu,
+    Shop,
+    Options,
+    Map,
+    Selection
+}
+class GameController extends Phaser.State implements EntityManagerDelegate, MenuDelegate {
 
+    keys: Input;
     map: Map;
 
     tile_manager: TileManager;
@@ -16,13 +25,22 @@ class GameController extends Phaser.State {
 
     cursor: Sprite;
 
-    selected: Entity;
 
     acc: number = 0;
+    private cursor_target: Pos;
     private last_cursor_position: Pos;
 
     private anim_cursor_state: number;
     private anim_cursor_slow: number;
+
+    private options_menu: MenuOptions;
+
+    private active_action: Action;
+    private selected_entity: Entity;
+
+    private current_context: GameContext;
+    private last_context: GameContext;
+
 
     constructor() {
         super();
@@ -30,6 +48,7 @@ class GameController extends Phaser.State {
 
     init(name: string) {
         this.map = new Map(name);
+        this.keys = new Input(this.game.input);
 
         this.turn = Alliance.Blue;
         this.gold = [];
@@ -61,72 +80,36 @@ class GameController extends Phaser.State {
 
         this.smoke_manager = new SmokeManager(this.map, smoke_group);
 
-        this.entity_manager = new EntityManager(this.map, entity_group, selection_group, interaction_group);
-
-        this.cursor = new Sprite({x: 0, y: 0}, cursor_group, "cursor", [0, 1]);
+        this.entity_manager = new EntityManager(this.map, entity_group, selection_group, interaction_group, this);
 
         this.frame_manager = new FrameManager();
 
         this.tile_manager.draw();
 
-        this.game.input.onDown.add(this.click, this);
-
-        this.startTurn(Alliance.Red);
-
         this.frame_def_info = new MenuDefInfo(this.frame_group);
         this.frame_manager.addFrame(this.frame_def_info);
         this.frame_def_info.show(true);
 
+        this.entity_manager.createEntity(EntityType.Soldier, Alliance.Red, new Pos(4, 13));
+
+        this.cursor_target = this.entity_manager.getKingPosition(Alliance.Blue);
+        this.cursor = new Sprite(this.cursor_target.getWorldPosition(), cursor_group, "cursor", [0, 1]);
+        this.cursor.setOffset(-1, -1);
+
+        this.camera.x = this.getOffsetX(this.cursor.world_position.x);
+        this.camera.y = this.getOffsetY(this.cursor.world_position.y);
+
+        this.current_context = GameContext.Map;
+
+        this.startTurn(Alliance.Blue);
+
+        this.showMessage("GAME LOADED");
+
     }
-
-    startTurn(alliance: Alliance) {
-
-        this.turn = alliance;
-
-        if (!this.frame_gold_info) {
-            this.frame_gold_info = new MenuGoldInfo(this.frame_group);
-            this.frame_manager.addFrame(this.frame_gold_info);
-        }
-
-        this.frame_gold_info.updateContent(alliance, this.getGoldForAlliance(alliance));
-        this.frame_gold_info.show(true);
-    }
-
-    getGoldForAlliance(alliance: Alliance) {
-        switch (alliance) {
-            case Alliance.Blue:
-                return this.gold[0];
-            case Alliance.Red:
-                return this.gold[1];
-        }
-        return -1;
-    }
-
-    getActivePos(): Pos {
-        // pos always inside canvas
-        let x = Math.floor((this.game.input.activePointer.x + this.game.camera.x) / AncientEmpires.TILE_SIZE);
-        let y = Math.floor((this.game.input.activePointer.y + this.game.camera.y) / AncientEmpires.TILE_SIZE);
-        return new Pos(x, y);
-    }
-    click() {
-
-        let position = this.getActivePos();
-
-        let selected = this.entity_manager.selected;
-        let entity = this.entity_manager.getEntityAt(position);
-
-        if (!!entity) {
-            // entity is there - deselect current
-            this.entity_manager.deselectEntity();
-        }else if (!!selected) {
-            // no entity and selected entity
-            this.entity_manager.moveSelectedEntity(position);
-        }
-
-        if (!!entity && entity != selected) {
-            this.entity_manager.selectEntity(entity);
-        }
-
+    showMessage(text: string) {
+        let menu = new Notification(this.frame_group, text, this);
+        this.frame_manager.addFrame(menu);
+        menu.show(true);
     }
     update() {
         // 1 step is 1/60 sec
@@ -137,44 +120,56 @@ class GameController extends Phaser.State {
         this.acc -= steps * 16;
         if (steps > 2) { steps = 2; }
 
-        let mx = this.game.input.activePointer.x;
-        let my = this.game.input.activePointer.y;
+        this.keys.update();
 
-        if (mx < 50 && this.game.camera.x > 0) {
-            let cx = this.game.camera.x - 2 * steps;
-            if (cx < 0) { cx = 0; }
-            this.game.camera.x = cx;
-        }
-        if (my < 50 && this.game.camera.y > 0) {
-            let cy = this.game.camera.y - 2 * steps;
-            if (cy < 0) { cy = 0; }
-            this.game.camera.y = cy;
-        }
-        if (mx > this.game.width - 50 && this.game.camera.x + this.game.width < this.game.world.width) {
-            let cx = this.game.camera.x + 2 * steps;
-            if (cx > this.game.world.width - this.game.width) { cx = this.game.world.width - this.game.width; }
-            this.game.camera.x = cx;
-        }
-        if (my > this.game.height - 50 && this.game.camera.y + this.game.height < this.game.world.height) {
-            let cy = this.game.camera.y + 2 * steps;
-            if (cy > this.game.world.height - this.game.height) { cy = this.game.world.height - this.game.height; }
-            this.game.camera.y = cy;
-        }
+        this.captureInput();
 
-        let cursor_is_left = mx < this.game.width / 2;
-        let info_is_right = (this.frame_gold_info.align & Direction.Right) != 0;
+        let cursor_position = this.cursor_target.getWorldPosition();
+        let diff_x = cursor_position.x - this.cursor.world_position.x;
+        let diff_y = cursor_position.y - this.cursor.world_position.y;
 
-        if (cursor_is_left != info_is_right) {
-            if (cursor_is_left) {
-                this.frame_gold_info.updateDirections(Direction.Up | Direction.Right, Direction.Left | Direction.Down, Direction.Right, true);
-                this.frame_def_info.updateDirections(Direction.Down | Direction.Right, Direction.Left | Direction.Up, Direction.Right, true);
-            }else {
-                this.frame_gold_info.updateDirections(Direction.Up | Direction.Left, Direction.Right | Direction.Down, Direction.Left, true);
-                this.frame_def_info.updateDirections(Direction.Down | Direction.Left, Direction.Right | Direction.Up, Direction.Left, true);
+        let dx = 0;
+        let dy = 0;
+
+        if (diff_x != 0) {
+            dx = Math.floor(diff_x / 4);
+            if (dx < 0) {
+                dx = Math.max(dx, -4);
+                dx = Math.min(dx, -1);
+            } else {
+                dx = Math.min(dx, 4);
+                dx = Math.max(dx, 1);
             }
+            this.cursor.setWorldPosition({x: this.cursor.world_position.x + dx, y: this.cursor.world_position.y + dy});
+        }
+        if (diff_y != 0) {
+            dy = Math.floor(diff_y / 4);
+            if (dy < 0) {
+                dy = Math.max(dy, -4);
+                dy = Math.min(dy, -1);
+            } else {
+                dy = Math.min(dy, 4);
+                dy = Math.max(dy, 1);
+            }
+            this.cursor.setWorldPosition({x: this.cursor.world_position.x + dx, y: this.cursor.world_position.y + dy});
+        }
+
+        if (!this.cursor_target.match(this.last_cursor_position)) {
+            this.last_cursor_position = this.cursor_target.copy();
+
+            // update def info
+            let entity = this.entity_manager.getEntityAt(this.cursor_target);
+            this.frame_def_info.updateContent(this.cursor_target, this.map, entity);
         }
 
 
+        // input
+
+        this.frame_manager.update(steps);
+
+        if (!!this.options_menu) {
+            return;
+        }
 
         this.anim_cursor_slow += steps;
         if (this.anim_cursor_slow > 30) {
@@ -183,25 +178,260 @@ class GameController extends Phaser.State {
             this.cursor.setFrame(this.anim_cursor_state);
         }
 
-        let cursor_position = this.getActivePos();
-        if (!cursor_position.match(this.last_cursor_position) && cursor_position.x > -1) {
-            this.last_cursor_position = cursor_position;
-            this.cursor.setWorldPosition({x: cursor_position.x * AncientEmpires.TILE_SIZE - 1, y: cursor_position.y * AncientEmpires.TILE_SIZE - 1});
-
-            // update def info
-            let entity = this.entity_manager.getEntityAt(cursor_position);
-            this.frame_def_info.updateContent(cursor_position, this.map, entity);
-        }
 
         this.tile_manager.update(steps);
         this.smoke_manager.update(steps);
 
-        this.entity_manager.update(steps, cursor_position, this.anim_cursor_state);
+        this.entity_manager.update(steps, this.cursor_target, this.anim_cursor_state);
 
-        this.cursor.update(steps);
+        let focus_position: IPos;
+        if (!!this.selected_entity) {
+            focus_position = this.selected_entity.world_position;
+        } else {
+            focus_position = this.cursor.world_position;
+        }
+        this.updateOffsetForPosition(focus_position);
 
-        this.frame_manager.update(steps);
+        let info_is_right = (this.frame_gold_info.align & Direction.Right) != 0;
+        if (!info_is_right && this.cursor.world_position.x - 1 - this.camera.x <= this.game.width / 2 - 24 - 12) {
+            this.frame_gold_info.updateDirections(Direction.Up | Direction.Right, Direction.Left | Direction.Down, Direction.Right, true);
+            this.frame_def_info.updateDirections(Direction.Down | Direction.Right, Direction.Left | Direction.Up, Direction.Right, true);
+        } else if (info_is_right && this.cursor.world_position.x + 1 - this.camera.x >= this.game.width / 2 + 12) {
+            this.frame_gold_info.updateDirections(Direction.Up | Direction.Left, Direction.Right | Direction.Down, Direction.Left, true);
+            this.frame_def_info.updateDirections(Direction.Down | Direction.Left, Direction.Right | Direction.Up, Direction.Left, true);
+        }
 
     }
 
+    entityDidMove(entity: Entity) {
+        let options = this.entity_manager.getEntityOptions(entity, true);
+        if (options.length < 1) { return; }
+        if (options.length > 1) {
+            this.showOptionMenu(options);
+        } else {
+            this.selectOption(options[0]);
+        }
+    }
+
+    openMenu(context: GameContext) {
+        this.last_context = this.current_context;
+        this.current_context = context;
+    }
+    closeMenu() {
+        this.current_context = this.last_context;
+    }
+
+    private selectEntity(entity: Entity): boolean {
+        let options = this.entity_manager.getEntityOptions(entity, false);
+        if (options.length < 1) {
+            return false;
+        }
+        if (options.length > 1) {
+            this.showOptionMenu(options);
+        } else {
+            this.selectOption(options[0]);
+        }
+        this.selected_entity = entity;
+        this.entity_manager.selectEntity(entity);
+        return true;
+    }
+    private deselectEntity() {
+        this.entity_manager.deselectEntity(this.selected_entity);
+        this.selected_entity = null;
+    }
+
+    private nextTurn() {
+        let next_turn = Alliance.Blue;
+        if (this.turn == Alliance.Blue) {
+            next_turn = Alliance.Red;
+        }
+        this.startTurn(next_turn);
+    }
+
+    private startTurn(alliance: Alliance) {
+
+        this.turn = alliance;
+
+        if (!this.frame_gold_info) {
+            this.frame_gold_info = new MenuGoldInfo(this.frame_group);
+            this.frame_manager.addFrame(this.frame_gold_info);
+        }
+
+        this.frame_gold_info.updateContent(alliance, this.getGoldForAlliance(alliance));
+        this.frame_gold_info.show(true);
+
+        this.entity_manager.startTurn(alliance);
+
+    }
+
+    private getGoldForAlliance(alliance: Alliance) {
+        switch (alliance) {
+            case Alliance.Blue:
+                return this.gold[0];
+            case Alliance.Red:
+                return this.gold[1];
+        }
+        return -1;
+    }
+
+    private showOptionMenu(options: Action[]) {
+
+        this.frame_def_info.hide(true);
+        this.frame_gold_info.hide(true);
+
+        this.options_menu = new MenuOptions(this.frame_group, Direction.Right, options, this);
+        this.frame_manager.addFrame(this.options_menu);
+        this.options_menu.show(true);
+    }
+
+    private selectOption(option: Action) {
+        this.active_action = option;
+        switch (option) {
+            case Action.OCCUPY:
+                this.map.setAllianceAt(this.selected_entity.position, this.selected_entity.alliance);
+                this.tile_manager.drawTileAt(this.selected_entity.position);
+                this.showMessage("OCCUPIED");
+                this.selected_entity.updateState(EntityState.Moved, true);
+                this.deselectEntity();
+                break;
+            case Action.ATTACK:
+                this.entity_manager.showRange(EntityRangeType.Attack, this.selected_entity);
+                break;
+            case Action.RAISE:
+                this.entity_manager.showRange(EntityRangeType.Raise, this.selected_entity);
+                break;
+            case Action.MOVE:
+                this.entity_manager.showRange(EntityRangeType.Move, this.selected_entity);
+                break;
+            case Action.BUY:
+                console.log("Open the shop");
+                break;
+            case Action.END_MOVE:
+                this.selected_entity.updateState(EntityState.Moved, true);
+                this.deselectEntity();
+                break;
+            case Action.END_TURN:
+                this.showMessage("END TURN");
+                this.nextTurn();
+                break;
+            case Action.CANCEL:
+                this.deselectEntity();
+                break;
+        }
+    }
+
+    private updateOffsetForPosition(position: IPos) {
+        let x = position.x + 0.5 * AncientEmpires.TILE_SIZE;
+        let y = position.y + 0.5 * AncientEmpires.TILE_SIZE;
+
+        this.updateOffset(x, y);
+    }
+    private updateOffset(x: number, y: number) {
+        let offset_x = this.getOffsetX(x);
+        let offset_y = this.getOffsetY(y);
+
+        let diff_x = offset_x - this.camera.x;
+        let diff_y = offset_y - this.camera.y;
+
+        if (diff_x != 0) {
+            let dx = Math.floor(diff_x / 12);
+            if (dx < 0) {
+                dx = Math.max(dx, -4);
+                dx = Math.min(dx, -1);
+            } else {
+                dx = Math.min(dx, 4);
+                dx = Math.max(dx, 1);
+            }
+            this.camera.x += dx;
+        }
+        if (diff_y != 0) {
+            let dy = Math.floor(diff_y / 12);
+            if (dy < 0) {
+                dy = Math.max(dy, -4);
+                dy = Math.min(dy, -1);
+            } else {
+                dy = Math.min(dy, 4);
+                dy = Math.max(dy, 1);
+            }
+            this.camera.y += dy;
+        }
+    }
+    private getOffsetX(x: number): number {
+        let offset_x = x - this.game.width / 2;
+        if (this.game.width < this.world.width) {
+            offset_x = Math.max(offset_x, 0);
+            offset_x = Math.min(offset_x, this.world.width - this.game.width);
+        } else {
+            offset_x = (this.game.width - this.world.width) / 2;
+        }
+        return offset_x;
+    }
+    private getOffsetY(y: number): number {
+        let offset_y = y - this.game.height / 2;
+        if (this.game.height < this.world.height) {
+            offset_y = Math.max(offset_y, 0);
+            offset_y = Math.min(offset_y, this.world.height - this.game.height);
+        } else {
+            offset_y = (this.game.height - this.world.height) / 2;
+        }
+        return offset_y;
+    }
+    private captureInput() {
+        switch (this.current_context) {
+            case GameContext.Map:
+                let cursor_still = this.cursor.world_position.x % 24 == 0 && this.cursor.world_position.y % 24 == 0;
+                if (this.keys.isKeyPressed(Key.Up) && cursor_still && this.cursor_target.y > 0) {
+                    this.cursor_target.move(Direction.Up);
+                } else if (this.keys.isKeyPressed(Key.Right) && cursor_still && this.cursor_target.x < this.map.width - 1) {
+                    this.cursor_target.move(Direction.Right);
+                } else if (this.keys.isKeyPressed(Key.Down) && cursor_still && this.cursor_target.y < this.map.height - 1) {
+                    this.cursor_target.move(Direction.Down);
+                } else if (this.keys.isKeyPressed(Key.Left) && cursor_still && this.cursor_target.x > 0) {
+                    this.cursor_target.move(Direction.Left);
+                } else if (this.keys.isKeyPressed(Key.Enter)) {
+                    this.keys.clearKeyPressed(Key.Enter);
+                    this.selectPosition(this.cursor_target);
+                }
+                break;
+            case GameContext.Options:
+                if (this.keys.isKeyPressed(Key.Up)) {
+                    this.keys.clearKeyPressed(Key.Up);
+                    this.options_menu.prev();
+                } else if (this.keys.isKeyPressed(Key.Down)) {
+                    this.keys.clearKeyPressed(Key.Down);
+                    this.options_menu.next();
+                } else if (this.keys.isKeyPressed(Key.Enter)) {
+                    this.keys.clearKeyPressed(Key.Enter);
+                    this.selectOption(this.options_menu.getSelected());
+                    this.options_menu.hide(true, true);
+                    this.options_menu = null;
+                } else if (this.keys.isKeyPressed(Key.Esc)) {
+                    this.keys.clearKeyPressed(Key.Esc);
+                    this.selectOption(Action.CANCEL);
+                    this.options_menu.hide(true, true);
+                    this.options_menu = null;
+                }
+                break;
+        }
+    }
+
+    private selectPosition(position: Pos) {
+        if (this.selected_entity) {
+            switch (this.active_action) {
+                case Action.MOVE:
+                    this.entity_manager.moveEntity(this.selected_entity, position);
+                    break;
+            }
+            return;
+        }
+
+
+        let entity = this.entity_manager.getEntityAt(position);
+        if (!!entity) {
+            // no entity selected, clicked on entity - try to select it
+            let success = this.selectEntity(entity);
+            if (success) { return; }
+        }
+        this.showOptionMenu(MenuOptions.getMainMenuOptions());
+    }
 }

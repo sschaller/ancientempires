@@ -146,6 +146,15 @@ class Map {
 
         return ret;
     }
+    setAllianceAt(position: Pos, alliance: Alliance): boolean {
+        for (let building of this.buildings){
+            if (building.position.match(position)) {
+                building.alliance = alliance;
+                return true;
+            }
+        }
+        return false;
+    }
     getAllianceAt(position: Pos) {
         for (let building of this.buildings){
             if (building.position.match(position)) {

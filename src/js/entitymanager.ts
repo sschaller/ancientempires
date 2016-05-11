@@ -9,10 +9,11 @@ interface EntityMove {
     line: LinePart[];
     progress: number;
 }
+interface EntityManagerDelegate {
+    entityDidMove(entity: Entity): void;
+}
 
 class EntityManager {
-
-    selected: Entity;
 
     private entities: Entity[];
     private map: Map;
@@ -28,30 +29,22 @@ class EntityManager {
 
     private selection_graphics: Phaser.Graphics;
     private interaction_graphics: Phaser.Graphics;
-    private move_sprite: Sprite;
 
-    private selection: EntityRange;
+    private entity_range: EntityRange;
 
-    private anim_selection_progress: number;
-    private anim_selection_inc: boolean;
+    private delegate: EntityManagerDelegate;
 
-    private anim_selection_pos: Pos;
-    private anim_selection_line: LinePart[];
-    private anim_selection_offset: number;
-    private anim_selection_slow: number;
-
-    constructor(map: Map, entity_group: Phaser.Group, selection_group: Phaser.Group, interaction_group: Phaser.Group) {
+    constructor(map: Map, entity_group: Phaser.Group, selection_group: Phaser.Group, interaction_group: Phaser.Group, delegate: EntityManagerDelegate) {
 
         this.map = map;
         this.entity_group = entity_group;
         this.selection_group = selection_group;
         this.interaction_group = interaction_group;
-        this.interaction_group.visible = false;
+        this.delegate = delegate;
 
         this.selection_graphics = selection_group.game.add.graphics(0, 0, selection_group);
         this.interaction_graphics = interaction_group.game.add.graphics(0, 0, interaction_group);
 
-        this.selected = null;
         this.moving = null;
 
         this.anim_idle_counter = 0;
@@ -61,6 +54,9 @@ class EntityManager {
         for (let entity of map.getStartEntities()) {
             this.createEntity(entity.type, entity.alliance, entity.position);
         }
+
+        this.entity_range = new EntityRange(this.map, this, this.interaction_group);
+
     }
     createEntity(type: EntityType, alliance: Alliance, position: Pos) {
         this.entities.push(new Entity(type, alliance, position, this.entity_group));
@@ -74,6 +70,50 @@ class EntityManager {
         return null;
     }
 
+    startTurn(alliance: Alliance) {
+        for (let i = this.entities.length - 1; i >= 0; i--) {
+            let entity = this.entities[i];
+            if (entity.state == EntityState.Dead) {
+                entity.death_count++;
+                if (entity.death_count >= AncientEmpires.DEATH_COUNT) {
+                    entity.destroy();
+                    this.entities.splice(i);
+                }
+                continue;
+            }
+            if (entity.alliance == alliance) {
+                entity.state = EntityState.Ready;
+            } else {
+                entity.state = EntityState.Moved;
+            }
+            let show = (entity.alliance == alliance);
+            entity.updateState(entity.state, show);
+        }
+    }
+
+    getAttackTargets(entity: Entity) {
+        let targets: Entity[] = [];
+        for (let enemy of this.entities) {
+            if (enemy.alliance == entity.alliance) { continue; }
+            let distance = entity.getDistanceToEntity(enemy);
+            if (distance > entity.data.max) { continue; }
+            if (distance < entity.data.min) { continue; }
+
+            targets.push(enemy);
+        }
+        return targets;
+    }
+    getRaiseTargets(entity: Entity) {
+        let targets: Entity[] = [];
+        for (let dead of this.entities) {
+            if (!dead.isDead()) { continue; }
+            let distance = entity.getDistanceToEntity(dead);
+            if (distance != 1) { continue; }
+            targets.push(dead);
+        }
+        return targets;
+    }
+
     update(steps: number, cursor_position: Pos, anim_state: number) {
 
         if (anim_state != this.anim_idle_state) {
@@ -83,109 +123,101 @@ class EntityManager {
             }
         }
 
-        if (!!this.selection) {
-            this.animateSelectionLayer(steps);
-            this.animateSelectionLine(steps, cursor_position);
-        }
-
-        if (!!this.moving) {
-            this.animateMovingEntity(steps);
-        }
+        this.entity_range.update(steps, cursor_position, anim_state, this.selection_graphics, this.interaction_graphics);
+        this.animateMovingEntity(steps);
 
     }
 
-    selectEntity(entity: Entity): boolean {
-        if (!!this.selected) {
-            this.deselectEntity();
-        }
-        this.selected = entity;
-        this.showSelection();
+    getEntityOptions(entity: Entity, moved: boolean = false): Action[] {
 
-        return true;
-    }
-    deselectEntity(): boolean {
-        if (!this.selected) {
-            return false;
-        }
-        this.hideSelection();
-        this.selected = null;
-        return true;
-    }
-    showSelection() {
-
-        this.interaction_group.visible = true;
-        if (!this.move_sprite) {
-            this.move_sprite = new Sprite({x: 0, y: 0}, this.interaction_group, "cursor", [4]);
+        if (entity.state != EntityState.Ready) {
+            return [];
         }
 
-        this.entity_group.remove(this.selected.sprite);
-        this.interaction_group.add(this.selected.sprite);
+        let options: Action[] = [];
 
-        this.selection = new EntityRange(this.selected, this.map, this);
+        if (!moved && entity.hasFlag(EntityFlags.CanBuy) && this.map.getTileAt(entity.position) == Tile.Castle) {
+            options.push(Action.BUY);
+        }
 
-        this.anim_selection_progress = 100;
-        this.anim_selection_inc = false;
-        this.drawSelection();
-
-        this.anim_selection_slow = 0;
-        this.anim_selection_offset = 0;
-        this.anim_selection_pos = null;
-        this.anim_selection_line = null;
-
-    }
-    hideSelection() {
-        this.interaction_group.remove(this.selected.sprite);
-        this.entity_group.add(this.selected.sprite);
-
-        this.interaction_graphics.clear();
-        this.interaction_group.visible = false;
-
-        this.selection = null;
-        this.selection_graphics.clear();
-
-    }
-    drawSelection() {
-        this.selection_graphics.beginFill(0xffffff);
-        for (let waypoint of this.selection.waypoints) {
-            let position = waypoint.position.getWorldPosition();
-            if ((waypoint.form & Direction.Up) != 0) {
-                this.selection_graphics.drawRect(position.x, position.y, AncientEmpires.TILE_SIZE, 4);
-            }
-            if ((waypoint.form & Direction.Right) != 0) {
-                this.selection_graphics.drawRect(position.x + AncientEmpires.TILE_SIZE - 4, position.y, 4, AncientEmpires.TILE_SIZE);
-            }
-            if ((waypoint.form & Direction.Down) != 0) {
-                this.selection_graphics.drawRect(position.x, position.y + AncientEmpires.TILE_SIZE - 4, AncientEmpires.TILE_SIZE, 4);
-            }
-            if ((waypoint.form & Direction.Left) != 0) {
-                this.selection_graphics.drawRect(position.x, position.y, 4, AncientEmpires.TILE_SIZE);
+        if (!entity.hasFlag(EntityFlags.CantAttackAfterMoving) || !moved) {
+            let attack_targets = this.getAttackTargets(entity);
+            if (attack_targets.length > 0) {
+                options.push(Action.ATTACK);
             }
         }
-        this.selection_graphics.endFill();
+
+        if (entity.hasFlag(EntityFlags.CanRaise)) {
+            let raise_targets = this.getRaiseTargets(entity);
+            if (raise_targets.length > 0) {
+                options.push(Action.RAISE);
+            }
+        }
+
+        if (this.map.getAllianceAt(entity.position) != entity.alliance && ((entity.hasFlag(EntityFlags.CanOccupyHouse) && this.map.getTileAt(entity.position) == Tile.House) || (entity.hasFlag(EntityFlags.CanOccupyCastle) && this.map.getTileAt(entity.position) == Tile.Castle))) {
+            options.push(Action.OCCUPY);
+        }
+
+        if (moved) {
+            options.push(Action.END_MOVE);
+        } else {
+            options.push(Action.MOVE);
+        }
+        return options;
     }
 
-    moveSelectedEntity(target: Pos): boolean {
+    selectEntity(entity: Entity) {
+        // move selected entity in a higher group
+        this.entity_group.remove(entity.sprite);
+        this.interaction_group.add(entity.sprite);
+    }
+    deselectEntity(entity: Entity) {
+        // move selected entity back to all other entities
+        this.interaction_group.remove(entity.sprite);
+        this.entity_group.addAt(entity.sprite, 0);
+    }
+
+    showRange(type: EntityRangeType, entity: Entity) {
+        this.entity_range.createRange(type, entity, this.selection_graphics);
+    }
+
+    hideRange() {
+        this.entity_range.clear(this.selection_graphics, this.interaction_graphics);
+    }
+
+    moveEntity(entity: Entity, target: Pos): boolean {
         if (!!this.getEntityAt(target)) {
             // entity at place
             return false;
         }
-        let waypoint = this.selection.getWaypointAt(target);
+        let waypoint = this.entity_range.getWaypointAt(target);
         if (!waypoint) {
             // target not in range
             return false;
         }
         let line = EntityRange.getLineToWaypoint(waypoint);
         this.moving = {
-            entity: this.selected,
+            entity: entity,
             target: target,
             line: line,
             progress: 0
         };
-        this.deselectEntity();
+        this.hideRange();
         return true;
     }
 
-    animateMovingEntity(steps: number) {
+    getKingPosition(alliance: Alliance): Pos {
+        for (let entity of this.entities) {
+            if (entity.alliance == alliance && entity.type == EntityType.King) {
+                return entity.position.copy();
+            }
+        }
+        return new Pos(0, 0);
+    }
+
+    private animateMovingEntity(steps: number) {
+        if (!this.moving) { return; }
+
         let move = this.moving;
         let entity = move.entity;
 
@@ -197,98 +229,14 @@ class EntityManager {
         }
         if (move.line.length > 0) {
             let diff = new Pos(0, 0).move(move.line[0].direction);
-            entity.worldPosition.x = move.line[0].position.x * AncientEmpires.TILE_SIZE + diff.x * move.progress;
-            entity.worldPosition.y = move.line[0].position.y * AncientEmpires.TILE_SIZE + diff.y * move.progress;
+            entity.world_position.x = move.line[0].position.x * AncientEmpires.TILE_SIZE + diff.x * move.progress;
+            entity.world_position.y = move.line[0].position.y * AncientEmpires.TILE_SIZE + diff.y * move.progress;
         } else {
             entity.position = move.target;
-            entity.worldPosition = move.target.getWorldPosition();
+            entity.world_position = move.target.getWorldPosition();
             this.moving = null;
+            this.delegate.entityDidMove(entity);
         }
         entity.update(steps);
-    }
-
-    animateSelectionLayer(steps: number) {
-        let value = this.anim_selection_progress / 100 * 0xFF | 0;
-        this.selection_graphics.tint = (value << 16) | (value << 8) | value;
-
-        if (this.anim_selection_inc) {
-            this.anim_selection_progress += steps;
-            if (this.anim_selection_progress >= 100) {
-                this.anim_selection_progress = 100;
-                this.anim_selection_inc = false;
-            }
-        } else {
-            this.anim_selection_progress -= steps;
-            if (this.anim_selection_progress <= 40) {
-                this.anim_selection_progress = 40;
-                this.anim_selection_inc = true;
-            }
-        }
-    }
-
-    private animateSelectionLine(steps: number, cursor_position: Pos) {
-        if (!cursor_position.match(this.anim_selection_pos)) {
-            this.anim_selection_pos = cursor_position;
-            let waypoint = this.selection.getWaypointAt(cursor_position);
-            if (!!waypoint) {
-                // update line if a way to cursor position exists
-                this.move_sprite.setWorldPosition({x: (cursor_position.x * AncientEmpires.TILE_SIZE - 1), y: (cursor_position.y * AncientEmpires.TILE_SIZE - 1)});
-                this.anim_selection_line = EntityRange.getLineToWaypoint(waypoint);
-            }
-        }
-        if (!this.anim_selection_line) { return; }
-        this.anim_selection_slow += steps;
-        if (this.anim_selection_slow < 5) { return; }
-        this.anim_selection_slow -= 5;
-
-        this.interaction_graphics.clear();
-        this.interaction_graphics.beginFill(0xffffff);
-
-        for (let part of this.anim_selection_line){
-            this.addSegmentsForLinePart(part, this.anim_selection_offset);
-            this.anim_selection_offset = (this.anim_selection_offset + part.length * AncientEmpires.TILE_SIZE) % (AncientEmpires.LINE_SEGMENT_LENGTH + AncientEmpires.LINE_SEGMENT_SPACING);
-        }
-        this.interaction_graphics.endFill();
-        this.anim_selection_offset -= 1;
-        if (this.anim_selection_offset < 0) {
-            this.anim_selection_offset = AncientEmpires.LINE_SEGMENT_LENGTH + AncientEmpires.LINE_SEGMENT_SPACING - 1;
-        }
-    }
-
-    private addSegmentsForLinePart(part: LinePart, offset: number) {
-        let distance = part.length * AncientEmpires.TILE_SIZE;
-        let x = (part.position.x + 0.5) * AncientEmpires.TILE_SIZE;
-        let y = (part.position.y + 0.5) * AncientEmpires.TILE_SIZE;
-
-        while (distance > 0) {
-            let length = AncientEmpires.LINE_SEGMENT_LENGTH;
-            if (offset > 0) {
-                length -= offset;
-                offset = 0;
-            }
-            if (distance < length) { length = distance; }
-
-
-            switch (part.direction) {
-                case Direction.Up:
-                    if (length > 0) { this.interaction_graphics.drawRect(x - AncientEmpires.LINE_SEGMENT_WIDTH / 2, y - length, AncientEmpires.LINE_SEGMENT_WIDTH, length); }
-                    y -= length + AncientEmpires.LINE_SEGMENT_SPACING;
-                    break;
-                case Direction.Right:
-                    if (length > 0) { this.interaction_graphics.drawRect(x, y - AncientEmpires.LINE_SEGMENT_WIDTH / 2, length, AncientEmpires.LINE_SEGMENT_WIDTH); }
-                    x += length + AncientEmpires.LINE_SEGMENT_SPACING;
-                    break;
-                case Direction.Down:
-                    if (length > 0) { this.interaction_graphics.drawRect(x - AncientEmpires.LINE_SEGMENT_WIDTH / 2, y, AncientEmpires.LINE_SEGMENT_WIDTH, length); }
-                    y += length + AncientEmpires.LINE_SEGMENT_SPACING;
-                    break;
-                case Direction.Left:
-                    if (length > 0) { this.interaction_graphics.drawRect(x - length, y - AncientEmpires.LINE_SEGMENT_WIDTH / 2, length, AncientEmpires.LINE_SEGMENT_WIDTH); }
-                    x -= length + AncientEmpires.LINE_SEGMENT_SPACING;
-                    break;
-            }
-
-            distance -= length + AncientEmpires.LINE_SEGMENT_SPACING;
-        }
     }
 }

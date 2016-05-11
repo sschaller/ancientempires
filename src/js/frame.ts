@@ -5,6 +5,9 @@ interface FrameRect {
     height: number;
     [key: string]: number;
 }
+interface FrameDelegate {
+    frameWillDestroy(frame: Frame): void;
+}
 enum FrameAnimation {
     None = 0,
     Show = 1,
@@ -18,10 +21,13 @@ class Frame {
     static BORDER_SIZE: number = 24;
     static ANIM_STEPS: number = 15;
 
+    delegate: FrameDelegate;
+
     group: Phaser.Group;
     border_group: Phaser.Group;
     content_group: Phaser.Group;
-    graphics: Phaser.Graphics;
+    content_graphics: Phaser.Graphics;
+    border_graphics: Phaser.Graphics;
 
     reuse_tiles: Phaser.Image[];
 
@@ -86,11 +92,12 @@ class Frame {
         this.content_group = this.group.game.add.group();
         this.group.add(this.content_group);
         this.content_group.visible = false;
-        this.graphics = this.group.game.add.graphics(0, 0, this.content_group);
+        this.content_graphics = this.group.game.add.graphics(0, 0, this.content_group);
 
         this.border_group = this.group.game.add.group();
         this.group.add(this.border_group);
         this.border_group.visible = false;
+        this.border_graphics = this.group.game.add.graphics(0, 0, this.border_group);
 
         this.game_width = this.group.game.width;
         this.game_height = this.group.game.height;
@@ -151,6 +158,7 @@ class Frame {
         }
         if (this.animation_direction == Direction.None) {
             this.animation |= FrameAnimation.Wire;
+            this.content_group.visible = false;
             this.removeFrame();
         }
         this.calculateSpeed();
@@ -244,9 +252,11 @@ class Frame {
         }
 
         if (finished_x && finished_y && finished_width && finished_height) {
+
+            this.animationDidEnd(this.animation);
             if ((this.animation & FrameAnimation.Wire) != 0) {
-                this.graphics.clear();
-                if ((this.animation & FrameAnimation.Hide) == 0) {
+                this.border_graphics.clear();
+                    if ((this.animation & FrameAnimation.Hide) == 0) {
                     this.drawFrame(this.width, this.height);
                     this.content_group.visible = true;
                 }
@@ -280,15 +290,20 @@ class Frame {
         }
         if ((this.animation & FrameAnimation.Wire) != 0) {
             // nice animation for frame with no alignment & no animation direction
-            this.graphics.clear();
-            this.graphics.lineStyle(1, 0xffffff);
-            this.graphics.drawRect(0, 0, this.current.width, this.current.height);
+            this.border_graphics.clear();
+            this.border_graphics.lineStyle(1, 0xffffff);
+            this.border_graphics.drawRect(0, 0, this.current.width, this.current.height);
         }
         this.updateOffset();
     }
     destroy() {
+        if (!!this.delegate) { this.delegate.frameWillDestroy(this); }
         this.border_group.destroy(true);
         this.content_group.destroy(true);
+    }
+
+    protected animationDidEnd(animation: FrameAnimation) {
+        // implemented in sub classes if needed - default: do nothing
     }
 
     private applyDirections() {
@@ -373,17 +388,15 @@ class Frame {
         if ((this.border & Direction.Down) != 0) {
             c_height -= 6;
         }
-        // this.content_group.width = c_width;
-        // this.content_group.height = c_height;
 
         let show_tiles_x = Math.ceil(width / Frame.BORDER_SIZE) - 2;
         let show_tiles_y = Math.ceil(height / Frame.BORDER_SIZE) - 2;
 
-        this.graphics.clear();
-        this.graphics.lineStyle(0);
-        this.graphics.beginFill(0xcebea5);
-        this.graphics.drawRect(0, 0, width, height);
-        this.graphics.endFill();
+        this.content_graphics.clear();
+        this.content_graphics.lineStyle(0);
+        this.content_graphics.beginFill(0xcebea5);
+        this.content_graphics.drawRect(0, 0, c_width, c_height);
+        this.content_graphics.endFill();
 
         let tiles: Phaser.Image[] = [];
 
@@ -426,7 +439,7 @@ class Frame {
         this.reuse_tiles = tiles;
     }
     private removeFrame() {
-        this.graphics.clear();
+        this.content_graphics.clear();
         this.removeTiles();
     }
     private drawBorderTile(x: number, y: number, direction: Direction) {

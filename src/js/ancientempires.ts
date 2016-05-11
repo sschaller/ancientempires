@@ -22,9 +22,11 @@ class AncientEmpires {
     static LINE_SEGMENT_LENGTH = 10;
     static LINE_SEGMENT_WIDTH = 4;
     static LINE_SEGMENT_SPACING = 2;
+    static DEATH_COUNT = 3;
 
     static NUMBER_OF_TILES: number = 23;
     static TILES_PROP: Tile[];
+    static LANG: string[];
 
     static game: Phaser.Game;
     loader: Loader;

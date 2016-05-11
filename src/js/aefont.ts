@@ -1,10 +1,49 @@
+enum AEFontStyle {
+    Normal,
+    Bold,
+    Large
+}
 class AEFont {
     x: number;
     y: number;
     text: string;
     group: Phaser.Group;
     letters: Phaser.Image[];
-    static getFontIndex(char: number): number {
+    private style: AEFontStyle;
+
+    static getWidth(style: AEFontStyle, length: number) {
+        if (style == AEFontStyle.Normal) {
+            return 6 * length;
+        }
+        if (style == AEFontStyle.Bold) {
+            return 7 * length;
+        }
+        return 10 * length;
+    }
+    static getFontIndex(style: AEFontStyle, char: number): number {
+
+        if (style == AEFontStyle.Large) {
+            // large font
+            if (char >= 48 && char <= 57) {
+                return char - 48;
+            }
+            console.log("Don't recognize char code " + char + " for font large");
+            return 0;
+        }
+        if (style == AEFontStyle.Normal) {
+            // normal font
+            if (char >= 65 && char <= 90) {
+                return char - 65;
+            }
+            if (char == 32) {
+                return -1;
+            }
+            console.log("Don't recognize char code " + char + " for font normal");
+            return 0;
+        }
+
+        // bold font
+
         if (char >= 65 && char < 90) { // capital letters without Z
             return char - 65;
         }else if (char >= 49 && char <= 57) { // all numbers without 0
@@ -16,13 +55,14 @@ class AEFont {
         }else if (char == 43) { // +
             return 26;
         }else {
-            console.log("Don't recognize char code " + char);
+            console.log("Don't recognize char code " + char + " for font bold");
             return 0;
         }
     }
-    constructor(x: number, y: number, group: Phaser.Group, text?: string) {
+    constructor(x: number, y: number, group: Phaser.Group, style: AEFontStyle, text?: string) {
         this.x = x;
         this.y = y;
+        this.style = style;
         this.text = text || "";
         this.group = group;
         this.letters = [];
@@ -32,18 +72,48 @@ class AEFont {
         this.text = text;
         this.draw();
     }
+    updatePosition(x: number, y: number) {
+        this.x = x;
+        this.y = y;
+
+        for (let letter of this.letters) {
+            letter.x = x;
+            letter.y = y;
+            x += letter.width;
+        }
+
+    }
+    setVisibility(visible: boolean) {
+        for (let letter of this.letters) {
+            letter.visible = visible;
+        }
+    }
     private draw() {
         let l: Phaser.Image[] = [];
         let x = this.x;
         for (let i = 0; i < this.text.length; i++) {
             let char = this.text.charCodeAt(i);
-            let index = AEFont.getFontIndex(char);
+            let index = AEFont.getFontIndex(this.style, char);
+
+            if (index < 0) {
+                x += AEFont.getWidth(this.style, 1);
+                continue;
+            }
+
+            let font_name: string;
+            if (this.style == AEFontStyle.Normal) {
+                font_name = "font7";
+            } else if (this.style == AEFontStyle.Bold) {
+                font_name = "chars";
+            } else if (this.style == AEFontStyle.Large) {
+                font_name = "lchars";
+            }
 
             let image: Phaser.Image;
             if (this.letters.length > 0) {
                 image = this.letters.shift();
             }else {
-                image = AncientEmpires.game.add.image(x, this.y, "chars", null, this.group);
+                image = AncientEmpires.game.add.image(x, this.y, font_name, null, this.group);
             }
             image.frame = index;
             l.push(image);

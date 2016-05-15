@@ -1,5 +1,4 @@
 enum AEFontStyle {
-    Normal,
     Bold,
     Large
 }
@@ -12,9 +11,6 @@ class AEFont {
     private style: AEFontStyle;
 
     static getWidth(style: AEFontStyle, length: number) {
-        if (style == AEFontStyle.Normal) {
-            return 6 * length;
-        }
         if (style == AEFontStyle.Bold) {
             return 7 * length;
         }
@@ -28,17 +24,6 @@ class AEFont {
                 return char - 48;
             }
             console.log("Don't recognize char code " + char + " for font large");
-            return 0;
-        }
-        if (style == AEFontStyle.Normal) {
-            // normal font
-            if (char >= 65 && char <= 90) {
-                return char - 65;
-            }
-            if (char == 32) {
-                return -1;
-            }
-            console.log("Don't recognize char code " + char + " for font normal");
             return 0;
         }
 
@@ -101,9 +86,7 @@ class AEFont {
             }
 
             let font_name: string;
-            if (this.style == AEFontStyle.Normal) {
-                font_name = "font7";
-            } else if (this.style == AEFontStyle.Bold) {
+            if (this.style == AEFontStyle.Bold) {
                 font_name = "chars";
             } else if (this.style == AEFontStyle.Large) {
                 font_name = "lchars";

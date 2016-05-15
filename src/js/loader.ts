@@ -10,7 +10,7 @@ class Loader extends Phaser.State {
     }
 
     preload() {
-        this.game.load.spritesheet("font7", "img/font7.png", 6, 7);
+        this.game.load.bitmapFont("font7", "data/font.png", "data/font.xml");
         this.game.load.binary("data", "data/1.pak", function(key: string, data: any): Uint8Array {
             return new Uint8Array(data);
         });
@@ -42,6 +42,23 @@ class Loader extends Phaser.State {
         PNGLoader.loadSpriteSheet(waiter, "chars");
         PNGLoader.loadImage(waiter, "gold");
         PNGLoader.loadImage(waiter, "pointer");
+        PNGLoader.loadSpriteSheet(waiter, "redspark");
+        PNGLoader.loadSpriteSheet(waiter, "spark");
+        PNGLoader.loadSpriteSheet(waiter, "smoke");
+
+
+
+        PNGLoader.loadSpriteSheet(waiter, "road", 24, 24);
+        PNGLoader.loadSpriteSheet(waiter, "grass", 24, 24);
+        PNGLoader.loadSpriteSheet(waiter, "mountain", 24, 24);
+        PNGLoader.loadSpriteSheet(waiter, "water", 24, 24);
+        PNGLoader.loadSpriteSheet(waiter, "town", 24, 24);
+        PNGLoader.loadImage(waiter, "woods_bg");
+        PNGLoader.loadImage(waiter, "hill_bg");
+        PNGLoader.loadImage(waiter, "mountain_bg");
+        PNGLoader.loadImage(waiter, "bridge_bg");
+        PNGLoader.loadImage(waiter, "town_bg");
+        PNGLoader.loadImage(waiter, "tombstone");
 
         waiter.await();
 

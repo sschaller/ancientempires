@@ -89,15 +89,16 @@ class Frame {
 
         this.group = group;
 
-        this.content_group = this.group.game.add.group();
-        this.group.add(this.content_group);
-        this.content_group.visible = false;
-        this.content_graphics = this.group.game.add.graphics(0, 0, this.content_group);
 
         this.border_group = this.group.game.add.group();
         this.group.add(this.border_group);
         this.border_group.visible = false;
         this.border_graphics = this.group.game.add.graphics(0, 0, this.border_group);
+
+        this.content_group = this.group.game.add.group();
+        this.group.add(this.content_group);
+        this.content_group.visible = false;
+        this.content_graphics = this.group.game.add.graphics(0, 0, this.content_group);
 
         this.game_width = this.group.game.width;
         this.game_height = this.group.game.height;

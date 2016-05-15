@@ -1,3 +1,7 @@
+interface MenuDelegate {
+    openMenu(context: InputContext): void;
+    closeMenu(context: InputContext): void;
+}
 class MenuGoldInfo extends Frame {
 
     gold_amount: AEFont;
@@ -83,7 +87,7 @@ class MenuDefInfo extends Frame {
 
         this.def_amount.setText(Map.getDefForTile(tile, entity).toString());
 
-        if (!!entity) {
+        if (!!entity && !entity.isDead()) {
             this.updateSize(68, 52);
             if (this.entity_icon.key != "unit_icons_" + entity.alliance) {
                 this.entity_icon.loadTexture("unit_icons_" + entity.alliance);
@@ -136,7 +140,7 @@ class MenuOptions extends Frame {
     selected: number;
 
     private options: Action[];
-    private fonts: AEFont[];
+    private fonts: Phaser.BitmapText[];
     private pointer: Phaser.Image;
     private pointer_state: number;
     private pointer_slow: number;
@@ -153,7 +157,7 @@ class MenuOptions extends Frame {
     constructor (group: Phaser.Group, align: Direction, options: Action[], delegate: MenuDelegate) {
         super();
 
-        this.menu_delegate = delegate
+        this.menu_delegate = delegate;
 
         this.options = options;
         this.selected = 0;
@@ -166,21 +170,21 @@ class MenuOptions extends Frame {
             }
         }
         let height = this.options.length * 13 + 16;
-        let width = AEFont.getWidth(AEFontStyle.Normal, max_length) + 31 + 13;
+        let width = max_length * 7 + 31 + 13;
 
         this.initialize(width, height, group, align, Direction.All & ~align, align);
 
         this.drawContent();
     }
     drawContent() {
-        let y = 6;
-        let fonts: AEFont[] = [];
+        let y = 5;
+        this.fonts = [];
         for (let option of this.options) {
             let text = MenuOptions.getOptionString(option);
-            fonts.push(new AEFont(25, y, this.content_group, AEFontStyle.Normal, text));
+            let font = this.group.game.add.bitmapText(25, y, "font7", text, 7, this.content_group);
+            this.fonts.push(font);
             y += 13;
         }
-        this.fonts = fonts;
 
         this.pointer = this.group.game.add.image(4, 4, "pointer", null, this.content_group);
         this.pointer_state = 2;
@@ -188,11 +192,11 @@ class MenuOptions extends Frame {
 
     }
     hide(animate: boolean = false, destroy_on_finish: boolean = false, update_on_finish: boolean = false) {
-        if (!!this.menu_delegate) { this.menu_delegate.closeMenu(); }
+        if (!!this.menu_delegate) { this.menu_delegate.closeMenu(InputContext.Options); }
         super.hide(animate, destroy_on_finish, update_on_finish);
     }
     show(animate: boolean = false) {
-        if (!!this.menu_delegate) { this.menu_delegate.openMenu(GameContext.Options); }
+        if (!!this.menu_delegate) { this.menu_delegate.openMenu(InputContext.Options); }
         super.show(animate);
     }
     next() {
@@ -221,16 +225,54 @@ class MenuOptions extends Frame {
 
         this.pointer.y = 4 + this.selected * 13;
         this.pointer.x = 4 + this.pointer_state;
-        this.pointer.visible = true;
+    }
+}
+
+class Notification extends Frame {
+    private font: Phaser.BitmapText;
+    private menu_delegate: MenuDelegate;
+
+    constructor (group: Phaser.Group, text: string, delegate: MenuDelegate) {
+        super();
+
+        this.menu_delegate = delegate;
+
+        this.font = group.game.add.bitmapText(9, 5, "font7", text, 7);
+        this.font.updateTransform();
+        let width = this.font.textWidth + 30;
+        this.initialize(width, 29, group, Direction.None, Direction.All, Direction.None);
+        this.content_group.add(this.font);
+    }
+    show(animate: boolean = false) {
+        if (!!this.menu_delegate) { this.menu_delegate.openMenu(InputContext.Wait); }
+        super.show(animate);
+    }
+    protected animationDidEnd(animation: FrameAnimation) {
+        if ((animation & FrameAnimation.Show) != 0) {
+            setTimeout(() => {
+                this.hide(true, true);
+            }, 1000);
+        }else if ((animation & FrameAnimation.Destroy) != 0) {
+            if (!!this.menu_delegate) { this.menu_delegate.closeMenu(InputContext.Wait); }
+        }
     }
 }
 
 class MenuShopUnits extends Frame {
 
-    entity_images: Phaser.Image[];
+    selected: number;
+    menu_delegate: MenuDelegate;
 
-    constructor (group: Phaser.Group) {
+    private entity_images: Phaser.Image[];
+    private pointer: Phaser.Image;
+    private pointer_state: number;
+    private pointer_slow: number;
+
+    constructor (group: Phaser.Group, delegate: MenuDelegate) {
         super();
+
+        this.selected = 0;
+        this.menu_delegate = delegate;
 
         this.initialize(64, group.game.height - 40, group, Direction.Right | Direction.Down, Direction.Up | Direction.Down | Direction.Left, Direction.Right);
         // draw content
@@ -239,6 +281,49 @@ class MenuShopUnits extends Frame {
     updateContent(alliance: Alliance) {
         for (let image of this.entity_images) {
             image.loadTexture("unit_icons_" + (<number> alliance), image.frame);
+        }
+    }
+    getSelected(): EntityType {
+        return <EntityType> this.selected;
+    }
+    show(animate: boolean = false) {
+        if (!!this.menu_delegate) { this.menu_delegate.openMenu(InputContext.Shop); }
+        super.show(animate);
+    }
+    hide(animate: boolean = false, destroy_on_finish: boolean = false, update_on_finish: boolean = false) {
+        if (!!this.menu_delegate) { this.menu_delegate.openMenu(InputContext.Shop); }
+        super.hide(animate, destroy_on_finish, update_on_finish);
+    }
+    update(steps: number) {
+        super.update(steps);
+
+        this.pointer_slow++;
+        if (this.pointer_slow > 10) {
+            this.pointer_slow = 0;
+            this.pointer_state = 2 - this.pointer_state;
+        }
+
+        this.pointer.y = 5 + Math.floor(this.selected / 2) * 29;
+        this.pointer.x = -9 + (this.selected % 2) * 28 + this.pointer_state;
+    }
+    prev(vertical: boolean) {
+        if (vertical) {
+            this.selected -= 2;
+        }else {
+            this.selected --;
+        }
+        if (this.selected < 0) {
+            this.selected += this.entity_images.length;
+        }
+    }
+    next(vertical: boolean) {
+        if (vertical) {
+            this.selected += 2;
+        }else {
+            this.selected ++;
+        }
+        if (this.selected >= this.entity_images.length) {
+            this.selected -= this.entity_images.length;
         }
     }
     private drawContent() {
@@ -254,49 +339,59 @@ class MenuShopUnits extends Frame {
             let x = (i % 2) * 27 + 3;
             let y = Math.floor(i / 2) * 29 + 5;
 
-            let image = this.group.game.add.image(x, y, "unit_icons_0", i, this.content_group);
+            let image = this.group.game.add.image(x, y, "unit_icons_1", i, this.content_group);
             this.entity_images.push(image);
         }
+        this.pointer = this.group.game.add.image(4, 4, "pointer", null, this.content_group);
+        this.pointer_state = 2;
+        this.pointer_slow = 0;
     }
 }
 
-interface MenuDelegate {
-    openMenu(context: GameContext): void;
-    closeMenu(): void;
-}
+class MenuShopInfo extends Frame {
+    group: Phaser.Group;
 
-class Notification extends Frame {
-    private font: AEFont;
-    private menu_delegate: MenuDelegate;
+    private unit_icon: Phaser.Image;
+    private unit_name: Phaser.BitmapText;
+    private unit_cost: AEFont;
+    private unit_atk: AEFont;
+    private unit_def: AEFont;
+    private unit_mov: AEFont;
+    private unit_text: Phaser.BitmapText;
 
-    constructor (group: Phaser.Group, text: string, delegate: MenuDelegate) {
+    constructor(group: Phaser.Group, alliance: Alliance) {
         super();
 
-        this.menu_delegate = delegate;
+        this.group = group;
 
-        let width = AEFont.getWidth(AEFontStyle.Normal, text.length);
-        this.initialize(width + 30, 29, group, Direction.None, Direction.All, Direction.None);
-        this.drawContent(text);
+        this.initialize(group.game.width - 64, group.game.height, group, Direction.Left, Direction.Up | Direction.Right | Direction.Down, Direction.Left);
+        this.drawContent(alliance);
     }
-    show(animate: boolean = false) {
-        if (!!this.menu_delegate) { this.menu_delegate.openMenu(GameContext.Notification); }
-        super.show(animate);
+    updateContent(type: EntityType) {
+        let data: EntityData = AncientEmpires.ENTITIES[(<number> type)];
+        this.unit_icon.frame = <number> type;
+        this.unit_name.setText(data.name.toUpperCase());
+        this.unit_cost.setText(data.cost.toString());
+        this.unit_atk.setText(data.atk.toString());
+        this.unit_def.setText(data.def.toString());
+        this.unit_mov.setText(data.mov.toString());
+        this.unit_text.setText(AncientEmpires.LANG[75 + (<number> type)]);
     }
-    updateContent(text: string) {
-        let width = AEFont.getWidth(AEFontStyle.Normal, text.length);
-        this.updateSize(width + 30, 29, false);
-        this.font.setText(text);
-    }
-    protected animationDidEnd(animation: FrameAnimation) {
-        if ((animation & FrameAnimation.Show) != 0) {
-            setTimeout(() => {
-                this.hide(true, true);
-            }, 1000);
-        }else if ((animation & FrameAnimation.Destroy) != 0) {
-            if (!!this.menu_delegate) { this.menu_delegate.closeMenu(); }
-        }
-    }
-    private drawContent(text: string) {
-        this.font = new AEFont(9, 6, this.content_group, AEFontStyle.Normal, text);
+    private drawContent(alliance: Alliance) {
+        this.unit_icon = this.group.game.add.image(2, 2, "unit_icons_" + (alliance == Alliance.Blue ? 1 : 2), 0, this.content_group);
+
+        this.unit_name = this.group.game.add.bitmapText(29, 4, "font7", "", 7, this.content_group);
+        this.group.game.add.image(28, 13, "gold", 0, this.content_group);
+        this.unit_cost = new AEFont(54, 16, this.content_group, AEFontStyle.Bold, "");
+
+        new AEFont(2, 33, this.content_group, AEFontStyle.Bold, "ATK");
+        this.unit_atk = new AEFont(95, 33, this.content_group, AEFontStyle.Bold, "");
+        new AEFont(2, 43, this.content_group, AEFontStyle.Bold, "DEF");
+        this.unit_def = new AEFont(95, 43, this.content_group, AEFontStyle.Bold, "");
+        new AEFont(2, 53, this.content_group, AEFontStyle.Bold, "MOV");
+        this.unit_mov = new AEFont(95, 53, this.content_group, AEFontStyle.Bold, "");
+
+        this.unit_text = this.group.game.add.bitmapText(6, 69, "font7", "", 7, this.content_group);
+        this.unit_text.maxWidth = this.group.game.width - 64 - 18;
     }
 }

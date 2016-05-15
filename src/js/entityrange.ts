@@ -99,7 +99,7 @@ class EntityRange {
                         this.waypoints.splice(i, 1);
                     }
                 }
-                this.addForm(false);
+                this.addForm();
 
                 this.extra_cursor.setFrames([2, 3]);
                 this.extra_cursor.setOffset(-1, -1);
@@ -107,7 +107,7 @@ class EntityRange {
                 break;
             case EntityRangeType.Move:
                 this.waypoints = this.calculateWaypoints(entity, entity.getMovement(), !entity.hasFlag(EntityFlags.CanFly));
-                this.addForm(true);
+                this.addForm();
 
                 this.extra_cursor.setFrames([4]);
                 this.extra_cursor.setOffset(-1, -4);
@@ -143,10 +143,10 @@ class EntityRange {
 
         if (!cursor_position.match(this.line_end_position)) {
             this.line_end_position = cursor_position.copy();
-            this.extra_cursor.setWorldPosition(cursor_position.getWorldPosition());
 
             let endpoint = this.getWaypointAt(cursor_position);
             if (!!endpoint) {
+                this.extra_cursor.setWorldPosition(cursor_position.getWorldPosition());
                 this.line = EntityRange.getLineToWaypoint(endpoint);
             }
         }
@@ -266,13 +266,13 @@ class EntityRange {
         open.push({position: position, parent: parent, form: 0, cost: new_cost});
         return true;
     }
-    private addForm(use_terrain: boolean) {
+    private addForm() {
         for (let waypoint of this.waypoints) {
             waypoint.form = 0;
-            if ((!use_terrain || waypoint.position.y > 0) && !this.getWaypointAt(waypoint.position.copy(Direction.Up))) { waypoint.form += 1; }
-            if ((!use_terrain || waypoint.position.x < this.map.width - 1) && !this.getWaypointAt(waypoint.position.copy(Direction.Right))) { waypoint.form += 2; }
-            if ((!use_terrain || waypoint.position.y < this.map.height - 1) && !this.getWaypointAt(waypoint.position.copy(Direction.Down))) { waypoint.form += 4; }
-            if ((!use_terrain || waypoint.position.x > 0) && !this.getWaypointAt(waypoint.position.copy(Direction.Left))) { waypoint.form += 8; }
+            if (waypoint.position.y > 0 && !this.getWaypointAt(waypoint.position.copy(Direction.Up))) { waypoint.form += 1; }
+            if (waypoint.position.x < this.map.width - 1 && !this.getWaypointAt(waypoint.position.copy(Direction.Right))) { waypoint.form += 2; }
+            if (waypoint.position.y < this.map.height - 1 && !this.getWaypointAt(waypoint.position.copy(Direction.Down))) { waypoint.form += 4; }
+            if (waypoint.position.x > 0 && !this.getWaypointAt(waypoint.position.copy(Direction.Left))) { waypoint.form += 8; }
         }
     }
     private drawSegment(graphics: Phaser.Graphics, part: LinePart, offset: number) {

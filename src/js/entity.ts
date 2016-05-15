@@ -58,6 +58,8 @@ class Entity extends Sprite {
     position: Pos;
     data: EntityData;
 
+    icon_health: Phaser.Image;
+
     health: number;
     rank: number;
     ep: number;
@@ -66,11 +68,12 @@ class Entity extends Sprite {
 
     status: EntityStatus;
     state: EntityState;
-    icon_moved: Phaser.Image;
 
     atk_boost: number = 0;
     def_boost: number = 0;
     mov_boost: number = 0;
+
+    private icon_moved: Phaser.Image;
 
     constructor(type: EntityType, alliance: Alliance, position: Pos, group: Phaser.Group) {
         super(position.getWorldPosition(), group, "unit_icons_" + (<number> alliance), [type, type + AncientEmpires.ENTITIES.length]);
@@ -90,6 +93,9 @@ class Entity extends Sprite {
 
         this.icon_moved = group.game.add.image(0, 0, "chars", 4, group);
         this.icon_moved.visible = false;
+
+        this.icon_health = group.game.add.image(0, 0, "chars", 0, group);
+        this.icon_health.visible = false;
     }
     isDead(): boolean {
         return this.health == 0;
@@ -152,7 +158,7 @@ class Entity extends Sprite {
         if (red_health > target.health) {
             red_health = target.health;
         }
-        target.health = target.health - red_health;
+        target.setHealth(target.health - red_health);
         this.ep += (target.data.atk + target.data.def) * red_health;
     }
     updateStatus() {
@@ -184,6 +190,14 @@ class Entity extends Sprite {
 
         this.state = state;
 
+        if (state == EntityState.Dead) {
+            this.sprite.loadTexture("tombstone", 0);
+            this.setFrames([0]);
+        } else {
+            this.sprite.loadTexture("unit_icons_" + (<number> this.alliance), (<number> this.type));
+            this.setFrames([this.type, this.type + AncientEmpires.ENTITIES.length]);
+        }
+
         let show_icon = (show && state == EntityState.Moved);
 
         this.icon_moved.x = this.sprite.x + AncientEmpires.TILE_SIZE - 7;
@@ -191,9 +205,30 @@ class Entity extends Sprite {
         this.icon_moved.visible = show_icon;
         this.icon_moved.bringToTop();
     }
+    update(steps: number = 1) {
+        this.icon_health.x = this.sprite.x;
+        this.icon_health.y = this.sprite.y + AncientEmpires.TILE_SIZE - 7;
 
+        super.update(steps);
+    }
+    setHealth(health: number) {
+        this.health = health;
+        if (health > 9 || health < 1) {
+            this.icon_health.visible = false;
+            return;
+        }
+        this.icon_health.visible = true;
+        this.icon_health.frame = 27 + (health - 1);
+        this.icon_health.x = this.sprite.x;
+        this.icon_health.y = this.sprite.y + AncientEmpires.TILE_SIZE - 7;
+    }
     getMovement(): number {
         // if poisoned, less -> apply here
         return this.data.mov;
+    }
+    destroy() {
+        this.icon_health.destroy();
+        this.icon_moved.destroy();
+        super.destroy();
     }
 }

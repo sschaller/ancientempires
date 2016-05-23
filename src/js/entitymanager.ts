@@ -9,54 +9,45 @@ interface EntityMove {
     line: LinePart[];
     progress: number;
 }
-interface EntityAttack {
-    attacker: Entity;
-    target: Entity;
-    anim_id: number;
-    acc: number;
-    progress: number;
-    first: boolean;
-    sprite: Phaser.Image;
-}
 interface EntityManagerDelegate {
     entityDidMove(entity: Entity): void;
-    entityDidAttack(entity: Entity): void;
+    entityDidAnimation(entity: Entity): void;
 }
 
 class EntityManager {
 
-    private entities: Entity[];
+    delegate: EntityManagerDelegate;
+
+    entities: Entity[];
     private map: Map;
 
     private moving: EntityMove;
 
-    private anim_idle_counter: number;
     private anim_idle_state: number;
 
     private entity_group: Phaser.Group;
     private selection_group: Phaser.Group;
     private interaction_group: Phaser.Group;
+    private anim_group: Phaser.Group;
 
     private selection_graphics: Phaser.Graphics;
     private interaction_graphics: Phaser.Graphics;
 
     private entity_range: EntityRange;
 
-    private delegate: EntityManagerDelegate;
 
     private selection_targets_x: Entity[];
     private selection_targets_y: Entity[];
     private selection_index_x: number;
     private selection_index_y: number;
 
-    private attacked: EntityAttack;
-
-    constructor(map: Map, entity_group: Phaser.Group, selection_group: Phaser.Group, interaction_group: Phaser.Group, delegate: EntityManagerDelegate) {
+    constructor(map: Map, entity_group: Phaser.Group, selection_group: Phaser.Group, interaction_group: Phaser.Group, anim_group: Phaser.Group, delegate: EntityManagerDelegate) {
 
         this.map = map;
         this.entity_group = entity_group;
         this.selection_group = selection_group;
         this.interaction_group = interaction_group;
+        this.anim_group = anim_group;
         this.delegate = delegate;
 
         this.selection_graphics = selection_group.game.add.graphics(0, 0, selection_group);
@@ -64,7 +55,6 @@ class EntityManager {
 
         this.moving = null;
 
-        this.anim_idle_counter = 0;
         this.anim_idle_state = 0;
 
         this.entities = [];
@@ -82,13 +72,13 @@ class EntityManager {
         return entity;
     }
     removeEntity(entity: Entity) {
-        entity.destroy();
         for (let i = 0; i < this.entities.length; i++) {
             if (entity == this.entities[i]) {
                 this.entities.splice(i, 1);
                 break;
             }
         }
+        entity.destroy();
     }
 
     getEntityAt(position: Pos) {
@@ -112,18 +102,22 @@ class EntityManager {
     startTurn(alliance: Alliance) {
         for (let i = this.entities.length - 1; i >= 0; i--) {
             let entity = this.entities[i];
-            if (entity.state == EntityState.Dead) {
+            if (entity.isDead()) {
                 entity.death_count++;
                 if (entity.death_count >= AncientEmpires.DEATH_COUNT) {
-                    entity.destroy();
-                    this.entities.splice(i);
+                    this.removeEntity(entity);
                 }
                 continue;
             }
             if (entity.alliance == alliance) {
                 entity.state = EntityState.Ready;
+                if (this.map.getAllianceAt(entity.position) == entity.alliance) {
+                    let nh = Math.min(entity.health + 2, 10);
+                    entity.setHealth(nh);
+                }
             } else {
                 entity.state = EntityState.Moved;
+                entity.clearStatus(EntityStatus.Poisoned);
             }
             let show = (entity.alliance == alliance);
             entity.updateState(entity.state, show);
@@ -185,16 +179,15 @@ class EntityManager {
 
     update(steps: number, cursor_position: Pos, anim_state: number) {
 
-        if (anim_state != this.anim_idle_state) {
-            this.anim_idle_state = anim_state;
-            for (let entity of this.entities) {
+        for (let entity of this.entities) {
+            if (this.anim_idle_state != anim_state) {
                 entity.setFrame(this.anim_idle_state);
             }
+            entity.update(steps);
         }
 
         this.entity_range.update(steps, cursor_position, anim_state, this.selection_graphics, this.interaction_graphics);
         this.animateMovingEntity(steps);
-        this.animateAttackedEntity(steps);
 
     }
 
@@ -264,13 +257,17 @@ class EntityManager {
             this.selection_index_y = 0;
         }
         return this.selection_targets_y[this.selection_index_y];
+    }
 
+    getTypeOfRange(): EntityRangeType {
+        return this.entity_range.type;
     }
 
     getAttackTargets(entity: Entity) {
         let targets: Entity[] = [];
         for (let enemy of this.entities) {
             if (enemy.alliance == entity.alliance) { continue; }
+            if (enemy.isDead()) { continue; }
             let distance = entity.getDistanceToEntity(enemy);
             if (distance > entity.data.max) { continue; }
             if (distance < entity.data.min) { continue; }
@@ -289,19 +286,56 @@ class EntityManager {
         }
         return targets;
     }
-    attackEntity(attacker: Entity, target: Entity, first: boolean = true) {
-        let position = target.position.getWorldPosition();
 
+    animationDidEnd(animation: EntityAnimation) {
+        animation.entity.animation = null;
+        switch (animation.type) {
+            case EntityAnimationType.Attack:
+                let attack = <AttackAnimation> animation;
+
+                if (attack.first && this.shouldCounter(attack.entity, attack.attacker)) {
+                    this.attackEntity(attack.entity, attack.attacker, false);
+                    return;
+                }
+                this.delegate.entityDidAnimation(attack.entity);
+
+                let attacker = attack.first ? attack.attacker : attack.entity;
+                let target = attack.first ? attack.entity : attack.attacker;
+
+
+                if (attacker.hasFlag(EntityFlags.CanPoison)) {
+                    target.setStatus(EntityStatus.Poisoned);
+                    target.status_animation = 0;
+                }
+                if (attacker.shouldRankUp()) {
+                    attacker.status_animation = 2;
+                }
+                if (target.shouldRankUp()) {
+                    target.status_animation = 2;
+                }
+
+                if (attacker.isDead() || attacker.status_animation >= 0) {
+                    attacker.startAnimation(new StatusAnimation(attacker, this, this.anim_group, attacker.isDead() ? -1 : attacker.status_animation));
+                }
+                if (target.isDead() || target.status_animation >= 0) {
+                    target.startAnimation(new StatusAnimation(target, this, this.anim_group, target.isDead() ? -1 : target.status_animation));
+                }
+                break;
+            case EntityAnimationType.Status:
+                animation.entity.status_animation = -1;
+                break;
+            case EntityAnimationType.Raise:
+                this.delegate.entityDidAnimation(animation.entity);
+                break;
+        }
+    }
+
+    attackEntity(attacker: Entity, target: Entity, first: boolean = true) {
         attacker.attack(target, this.map);
-        this.attacked = {
-            target: target,
-            attacker: attacker,
-            anim_id: 0,
-            progress: 0,
-            acc: 0,
-            first: first,
-            sprite: this.entity_group.game.add.sprite(position.x, position.y, "redspark", 0, this.interaction_group)
-        };
+        target.startAnimation(new AttackAnimation(target, this, this.anim_group, attacker, first));
+    }
+    raiseEntity(wizard: Entity, tomb: Entity) {
+        tomb.startAnimation(new RaiseAnimation(tomb, this, this.anim_group, wizard.alliance));
     }
     shouldCounter(attacker: Entity, target: Entity): boolean {
         if (attacker.health > 0 && attacker.getDistanceToEntity(target) < 2 && attacker.data.min < 2) {
@@ -322,7 +356,7 @@ class EntityManager {
             entity.setWorldPosition(target.getWorldPosition());
             return true;
         }
-        if (!!this.getEntityAt(target)) {
+        if (!!this.getEntityAt(target) && !target.match(entity.position)) {
             // Cant move where another unit is
             return false;
         }
@@ -340,6 +374,25 @@ class EntityManager {
         };
         this.hideRange();
         return true;
+    }
+
+    resetWisp(alliance: Alliance, show: boolean) {
+        for (let entity of this.entities) {
+            if (entity.alliance != alliance) { continue; }
+            entity.clearStatus(EntityStatus.Wisped);
+            if (this.hasWispInRange(entity)) {
+                entity.setStatus(EntityStatus.Wisped);
+                if (show) { entity.startAnimation(new StatusAnimation(entity, this, this.anim_group, 1)); }
+            }
+        }
+    }
+
+    exportEntities(): EntitySave[] {
+        let exp: EntitySave[] = [];
+        for (let entity of this.entities) {
+            exp.push(entity.export());
+        }
+        return exp;
     }
 
     private animateMovingEntity(steps: number) {
@@ -368,82 +421,14 @@ class EntityManager {
         entity.update(steps);
     }
 
-    private animateAttackedEntity(steps: number) {
-        if (!this.attacked) { return; }
-        let attacked = this.attacked;
-
-        attacked.acc++;
-        if (attacked.acc >= 5) {
-            attacked.acc -= 5;
-
-            let middle = this.attacked.target.position.getWorldPosition();
-
-            if (attacked.progress >= 30) {
-                if (attacked.anim_id < 5) {
-                    attacked.anim_id = 5;
-
-                    attacked.sprite.destroy();
-                    this.attacked = null;
-                    this.delegate.entityDidAttack(attacked.attacker);
-                }
-            }else if (attacked.progress >= 22) {
-                if (attacked.anim_id < 4) {
-                    attacked.anim_id = 4;
-
-                    attacked.sprite.loadTexture("smoke", 0);
-                    // replace with tomb graphic
-                    attacked.target.updateState(EntityState.Dead, true);
-                }
-
-                attacked.sprite.y = middle.y - (attacked.progress - 22) * 3; // 0, 3, 6
-                attacked.sprite.frame = Math.floor((attacked.progress - 22) / 2);
-
-            }else if (attacked.progress >= 16) {
-                if (attacked.anim_id < 3) {
-                    attacked.anim_id = 3;
-
-                    attacked.sprite.loadTexture("spark", 0);
-                    attacked.sprite.visible = true; // show sprite
-                }
-                attacked.sprite.frame = attacked.progress - 16;
-
-            }else if (attacked.progress >= 8) {
-                if (attacked.anim_id < 2) {
-                    attacked.anim_id = 2;
-
-                    // reset position
-                    attacked.target.setWorldPosition(attacked.target.position.getWorldPosition());
-                    if (!attacked.target.isDead()) {
-                        attacked.sprite.destroy();
-                        this.attacked = null; // stop animation if not dead
-                        if (attacked.first) {
-                            let should_counter = this.shouldCounter(attacked.target, attacked.attacker);
-                            if (should_counter) {
-                                this.attackEntity(attacked.target, attacked.attacker, false);
-                                return;
-                            }
-                        }
-                        this.delegate.entityDidAttack(attacked.first ? attacked.attacker : attacked.target);
-                    }
-                }
-                // wait - do nothing
-
-            }else if (attacked.progress >= 6) {
-                if (attacked.anim_id < 1) {
-                    attacked.anim_id = 1;
-
-                    // hide sprite
-                    attacked.sprite.visible = false;
-                }
-                attacked.target.setWorldPosition({x: middle.x + 2 - attacked.progress % 2 * 4, y: middle.y}); // 7 - 2px left, 8 - 2px right
-
-            }else {
-                // Animate spark over target & shake target
-                attacked.sprite.frame = attacked.progress % 3;
-                attacked.target.setWorldPosition({x: middle.x + 2 - attacked.progress % 2 * 4, y: middle.y}); // 0 - 2px right, 1 - 2px left, 2 - 2px right
-
-            }
-            attacked.progress++;
+    private hasWispInRange(entity: Entity): boolean {
+        for (let wisp of this.entities) {
+            if (wisp.alliance != entity.alliance) { continue; }
+            if (!wisp.hasFlag(EntityFlags.CanWisp)) { continue; }
+            let distance = entity.getDistanceToEntity(wisp);
+            if (distance < 1 || distance > 2) { continue; }
+            return true;
         }
+        return false;
     }
 }

@@ -11,6 +11,6 @@ class MainMenu extends Phaser.State {
     }
 
     loadMap (name: string) {
-        this.game.state.start("Game", false, false, name);
+        this.game.state.start("Game", true, false, name);
     }
 }

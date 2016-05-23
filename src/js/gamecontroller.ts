@@ -3,7 +3,17 @@ enum InputContext {
     Shop,
     Options,
     Map,
-    Selection
+    Selection,
+    Animation,
+    Ack
+}
+interface GameSave {
+    buildings: BuildingSave[];
+    entities: EntitySave[];
+    map: number;
+    campaign: boolean;
+    turn: Alliance;
+    gold: number[];
 }
 class GameController extends Phaser.State implements EntityManagerDelegate, MenuDelegate {
 
@@ -34,37 +44,66 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
     private options_menu: MenuOptions;
 
-    private active_action: Action;
     private selected_entity: Entity;
     private last_entity_position: Pos;
 
     private context: InputContext[];
     private shop_units: MenuShopUnits;
     private shop_info: MenuShopInfo;
+    private mini_map: MiniMap;
 
     constructor() {
         super();
     }
 
-    init(name: string) {
+    init(name: string, save?: GameSave) {
         this.map = new Map(name);
         this.keys = new Input(this.game.input);
 
-        this.turn = Alliance.Blue;
-        this.gold = [];
+        if (!!save) {
+            // TODO: save
+        }else {
+            this.turn = Alliance.Blue;
+            this.gold = [];
 
-        if (name.charAt(0) == "s") {
-            this.gold[0] = 1000;
-            this.gold[1] = 1000;
-        } else {
-            this.gold[0] = 300;
-            this.gold[1] = 300;
+            if (name.charAt(0) == "s") {
+                this.gold[0] = 1000;
+                this.gold[1] = 1000;
+            } else {
+                this.gold[0] = 300;
+                this.gold[1] = 300;
+            }
         }
+    }
+    loadGame(): boolean {
+        let data = localStorage.getItem("save.rs");
+        if (!data) {
+            return false;
+        }
+        if (typeof JSON.parse != "function") {
+            console.error("Browser does not support JSON.parse");
+            return false;
+        }
+        let save: GameSave = JSON.parse(data);
 
-        this.anim_cursor_state = 0;
-        this.anim_cursor_slow = 0;
+        let name = (save.campaign ? "m" : "s") + save.map;
+        this.game.state.start("Game", true, false, name, save);
+        return true;
+    }
+    saveGame() {
 
-        this.context = [InputContext.Map];
+        let save: GameSave = {
+            entities: this.entity_manager.exportEntities(),
+            buildings: this.map.exportBuildingAlliances(),
+            gold: this.gold,
+            turn: this.turn,
+            campaign: this.map.isCampaign(),
+            map: this.map.getMap()
+        };
+
+        console.log(save);
+
+        localStorage.setItem("save.rs", JSON.stringify(save));
 
     }
     create() {
@@ -76,6 +115,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         let entity_group = this.game.add.group();
         let interaction_group = this.game.add.group();
         let cursor_group = this.game.add.group();
+        let animation_group = this.game.add.group();
         this.frame_group = this.game.add.group();
         this.frame_group.fixedToCamera = true;
 
@@ -83,7 +123,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
         this.smoke_manager = new SmokeManager(this.map, smoke_group);
 
-        this.entity_manager = new EntityManager(this.map, entity_group, selection_group, interaction_group, this);
+        this.entity_manager = new EntityManager(this.map, entity_group, selection_group, interaction_group, animation_group, this);
 
         this.frame_manager = new FrameManager();
 
@@ -97,8 +137,10 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.frame_manager.addFrame(this.frame_gold_info);
         this.frame_gold_info.show(true);
 
-        let soldier = this.entity_manager.createEntity(EntityType.Soldier, Alliance.Red, new Pos(4, 13));
-        soldier.setHealth(2);
+        let spider = this.entity_manager.createEntity(EntityType.Spider, Alliance.Red, new Pos(4, 13));
+        spider.setHealth(6);
+        let wizard = this.entity_manager.createEntity(EntityType.Wizard, Alliance.Blue, new Pos(4, 14));
+        wizard.setHealth(9);
 
         this.cursor_target = this.entity_manager.getKingPosition(Alliance.Blue);
         this.cursor = new Sprite(this.cursor_target.getWorldPosition(), cursor_group, "cursor", [0, 1]);
@@ -106,6 +148,12 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
         this.camera.x = this.getOffsetX(this.cursor.world_position.x);
         this.camera.y = this.getOffsetY(this.cursor.world_position.y);
+
+        this.anim_cursor_state = 0;
+        this.anim_cursor_slow = 0;
+
+        this.context = [InputContext.Map];
+        this.keys = new Input(this.game.input);
 
         this.startTurn(Alliance.Blue);
 
@@ -164,8 +212,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
             this.last_cursor_position = this.cursor_target.copy();
 
             // update def info
-            let entity = this.entity_manager.getEntityAt(this.cursor_target);
-            this.frame_def_info.updateContent(this.cursor_target, this.map, entity);
+            this.frame_def_info.updateContent(this.cursor_target, this.map, this.entity_manager);
         }
 
 
@@ -173,7 +220,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
         this.frame_manager.update(steps);
 
-        if (!!this.options_menu) {
+        if (this.context[this.context.length - 1] != InputContext.Map && this.context[this.context.length - 1] != InputContext.Selection && this.context[this.context.length - 1] != InputContext.Animation) {
             return;
         }
 
@@ -209,7 +256,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.showOptionMenu(options);
     }
 
-    entityDidAttack(entity: Entity) {
+    entityDidAnimation(entity: Entity) {
         this.context.pop();
         this.selected_entity.updateState(EntityState.Moved, true);
         this.deselectEntity();
@@ -266,7 +313,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         }
         return true;
     }
-    private deselectEntity() {
+    private deselectEntity(changed: boolean = true) {
         if (!this.selected_entity) { return; }
 
         this.cursor_target = this.selected_entity.position.copy();
@@ -275,6 +322,12 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.entity_manager.deselectEntity(this.selected_entity);
         this.last_entity_position = null;
         this.selected_entity = null;
+
+        // if something changed
+        if (changed) {
+            this.entity_manager.resetWisp(this.turn, true);
+            this.frame_def_info.updateContent(this.cursor_target, this.map, this.entity_manager);
+        }
     }
 
     private nextTurn() {
@@ -288,10 +341,8 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
     private startTurn(alliance: Alliance) {
 
         this.turn = alliance;
-
-        this.frame_gold_info.updateContent(alliance, this.getGoldForAlliance(alliance));
-
         this.entity_manager.startTurn(alliance);
+        this.frame_gold_info.updateContent(alliance, this.getGoldForAlliance(alliance));
 
     }
 
@@ -315,7 +366,9 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                 break;
         }
         this.gold[alliance_id] = amount;
-        if (!!this.frame_gold_info) { this.frame_gold_info.updateContent(alliance, amount); }
+        if (this.turn == alliance) {
+            this.frame_gold_info.updateContent(alliance, amount);
+        }
     }
 
     private showOptionMenu(options: Action[]) {
@@ -326,8 +379,15 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.context.push(InputContext.Options);
     }
 
+    private showMainMenu(actions: Action[]) {
+
+        this.options_menu = new MenuOptions(this.frame_group, Direction.None, actions, this, Direction.Up);
+        this.frame_manager.addFrame(this.options_menu);
+        this.options_menu.show(true);
+        this.context.push(InputContext.Options);
+    }
+
     private selectOption(option: Action) {
-        this.active_action = option;
         switch (option) {
             case Action.OCCUPY:
                 this.map.setAllianceAt(this.selected_entity.position, this.selected_entity.alliance);
@@ -338,9 +398,10 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                 break;
             case Action.ATTACK:
                 this.context.push(InputContext.Selection);
-                this.cursor.hide();
+
                 this.entity_manager.showRange(EntityRangeType.Attack, this.selected_entity);
                 this.cursor_target = this.entity_manager.nextTargetInRange(Direction.None).position.copy();
+                this.cursor.hide();
                 break;
             case Action.RAISE:
                 this.context.push(InputContext.Selection);
@@ -361,10 +422,31 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                 this.showMessage("END TURN");
                 this.nextTurn();
                 break;
+            case Action.MAIN_MENU:
+                this.showMainMenu(MenuOptions.getMainMenuOptions(true));
+                break;
+            case Action.MAP:
+                this.openMap();
+                break;
+            case Action.SAVE_GAME:
+                this.saveGame();
+                this.showMessage(AncientEmpires.LANG[41]);
+                break;
+            case Action.LOAD_GAME:
+                this.loadGame();
+                break;
+            case Action.SELECT_LEVEL:
+
+                break;
+            case Action.SKIRMISH:
+
+                break;
+            case Action.EXIT:
+                this.game.state.start("MainMenu", true, false);
+                break;
             case Action.CANCEL:
                 if (!!this.last_entity_position) {
                     // last action was walking. reset entity & set cursor to current position
-                    this.active_action = Action.MOVE;
                     this.cursor_target = this.selected_entity.position;
 
                     this.entity_manager.moveEntity(this.selected_entity, this.last_entity_position, false);
@@ -373,8 +455,11 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                     this.entity_manager.showRange(EntityRangeType.Move, this.selected_entity);
 
                 } else {
-                    this.deselectEntity();
+                    this.deselectEntity(false);
                 }
+                break;
+            default:
+                console.log("Action " + MenuOptions.getOptionString(option) + " not yet implemented");
                 break;
         }
     }
@@ -456,8 +541,8 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                 } else if (this.keys.isKeyPressed(Key.Esc)) {
                     this.keys.clearKeyPressed(Key.Esc);
                     let entity = this.selected_entity;
-                    this.deselectEntity();
-                    if (entity.position.match(this.entity_manager.getKingPosition(this.turn)) && entity.data.cost <= 1000) {
+                    this.deselectEntity(false);
+                    if (!!entity && entity.position.match(this.entity_manager.getKingPosition(this.turn)) && entity.data.cost <= 1000) {
                         // entity was bought, add gold back and remove entity
                         let gold = this.getGoldForAlliance(this.turn);
                         this.setGoldForAlliance(this.turn, gold + entity.data.cost);
@@ -475,17 +560,21 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                     this.options_menu.next();
                 } else if (this.keys.isKeyPressed(Key.Enter)) {
                     this.keys.clearKeyPressed(Key.Enter);
+
+                    let selected = this.options_menu.getSelected();
+
                     this.context.pop();
-                    this.selectOption(this.options_menu.getSelected());
                     this.options_menu.hide(true, true);
                     this.options_menu = null;
+
+                    this.selectOption(selected);
                 } else if (this.keys.isKeyPressed(Key.Esc)) {
                     this.keys.clearKeyPressed(Key.Esc);
 
                     this.context.pop();
-                    this.selectOption(Action.CANCEL);
                     this.options_menu.hide(true, true);
                     this.options_menu = null;
+                    this.selectOption(Action.CANCEL);
                 }
                 break;
             case InputContext.Selection:
@@ -547,7 +636,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                     let data = AncientEmpires.ENTITIES[entity_type];
                     let gold = this.getGoldForAlliance(this.turn) - data.cost;
                     if (gold >= 0) {
-                        this.deselectEntity();
+                        this.deselectEntity(false);
                         this.closeShop();
                         this.setGoldForAlliance(this.turn, gold);
                         let entity = this.entity_manager.createEntity(entity_type, this.turn, this.entity_manager.getKingPosition(this.turn));
@@ -555,32 +644,41 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
                     }
                 } else if (this.keys.isKeyPressed(Key.Esc)) {
                     this.keys.clearKeyPressed(Key.Esc);
-                    this.deselectEntity();
+                    this.deselectEntity(false);
                     this.closeShop();
+                }
+                break;
+            case InputContext.Ack:
+                if (this.keys.isKeyPressed(Key.Enter)) {
+                    this.keys.clearKeyPressed(Key.Enter);
+                    this.closeMap();
+                } else if (this.keys.isKeyPressed(Key.Esc)) {
+                    this.keys.clearKeyPressed(Key.Esc);
+                    this.closeMap();
                 }
                 break;
         }
     }
 
     private pickEntity(entity: Entity) {
-        this.entity_manager.hideRange();
-        this.cursor.show();
-        this.context.push(InputContext.Wait);
-        switch (this.active_action) {
-            case Action.ATTACK:
+
+        this.context.push(InputContext.Animation);
+        switch (this.entity_manager.getTypeOfRange()) {
+            case EntityRangeType.Attack:
                 this.entity_manager.attackEntity(this.selected_entity, entity);
-                console.log("Attack Entity!", entity.getInfo());
                 break;
-            case Action.RAISE:
-                console.log("Raise Entity", entity.getInfo());
+            case EntityRangeType.Raise:
+                this.entity_manager.raiseEntity(this.selected_entity, entity);
                 break;
         }
+        this.entity_manager.hideRange();
+        this.cursor.show();
     }
 
     private pickPosition(position: Pos) {
         if (this.selected_entity) {
-            switch (this.active_action) {
-                case Action.MOVE:
+            switch (this.entity_manager.getTypeOfRange()) {
+                case EntityRangeType.Move:
                     this.last_entity_position = this.selected_entity.position.copy();
                     this.entity_manager.moveEntity(this.selected_entity, position);
                     break;
@@ -594,7 +692,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
             let success = this.selectEntity(entity);
             if (success) { return; }
         }
-        this.showOptionMenu(MenuOptions.getMainMenuOptions());
+        this.showOptionMenu(MenuOptions.getOffMenuOptions());
     }
 
     private openShop(alliance: Alliance) {
@@ -603,7 +701,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
             this.shop_units = new MenuShopUnits(this.frame_group, this);
             this.frame_manager.addFrame(this.shop_units);
         }
-        this.shop_units.updateContent(alliance);
+        this.shop_units.updateContent(alliance, this.getGoldForAlliance(alliance));
         this.shop_units.show(true);
 
         this.shop_info = new MenuShopInfo(this.frame_group, alliance);
@@ -618,5 +716,18 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.shop_units = null;
         this.shop_info.hide(true, true);
         this.shop_info = null;
+    }
+
+    private openMap() {
+        this.context.push(InputContext.Ack);
+        this.mini_map = new MiniMap(this.map, this.entity_manager, this.frame_group, this);
+        this.frame_manager.addFrame(this.mini_map);
+        this.mini_map.show(true);
+    }
+
+    private closeMap() {
+        this.context.pop();
+        this.mini_map.hide(true, true);
+        this.mini_map = null;
     }
 }

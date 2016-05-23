@@ -27,6 +27,19 @@ interface IEntity {
     alliance: Alliance;
     position: Pos;
 }
+
+interface EntitySave {
+    x: number;
+    y: number;
+    type: EntityType;
+    alliance: Alliance;
+    rank: number;
+    ep: number;
+    state: EntityState;
+    status: EntityStatus;
+    health: number;
+    death_count: number;
+}
 enum EntityType {
     Soldier,
     Archer,
@@ -73,6 +86,8 @@ class Entity extends Sprite {
     def_boost: number = 0;
     mov_boost: number = 0;
 
+    animation: EntityAnimation;
+    status_animation: number;
     private icon_moved: Phaser.Image;
 
     constructor(type: EntityType, alliance: Alliance, position: Pos, group: Phaser.Group) {
@@ -91,6 +106,8 @@ class Entity extends Sprite {
         this.status = 0;
         this.state = EntityState.Ready;
 
+        this.status_animation = -1;
+
         this.icon_moved = group.game.add.image(0, 0, "chars", 4, group);
         this.icon_moved.visible = false;
 
@@ -106,7 +123,7 @@ class Entity extends Sprite {
     getDistanceToEntity(entity: Entity): number {
         return Math.abs(entity.position.x - this.position.x) + Math.abs(entity.position.y - this.position.y);
     }
-    didRankUp(): boolean {
+    shouldRankUp(): boolean {
         if (this.rank < 3 && this.ep >= 75 << this.rank) {
             this.ep = 0;
             this.rank++;
@@ -129,8 +146,9 @@ class Entity extends Sprite {
             atk += 3;
         }
 
-        n = Math.floor(Math.random() * 20) + this.rank;
-        if (n > 19) {
+        n = Math.floor(Math.random() * 39) - 19 + this.rank; // -19 - 19 random
+
+        if (n >= 19) {
             atk += 2;
         }else if (n >= 17) {
             atk += 1;
@@ -142,9 +160,9 @@ class Entity extends Sprite {
 
         let def = target.data.def + target.def_boost;
 
-        n = Math.floor(Math.random() * 20) + target.rank;
+        n = Math.floor(Math.random() * 39) - 19 + target.rank; // -19 - 19 random
 
-        if (n > 19) {
+        if (n >= 19) {
             def += 2;
         }else if (n >= 17) {
             def += 1;
@@ -158,6 +176,7 @@ class Entity extends Sprite {
         if (red_health > target.health) {
             red_health = target.health;
         }
+
         target.setHealth(target.health - red_health);
         this.ep += (target.data.atk + target.data.def) * red_health;
     }
@@ -205,7 +224,15 @@ class Entity extends Sprite {
         this.icon_moved.visible = show_icon;
         this.icon_moved.bringToTop();
     }
+    startAnimation(animation: EntityAnimation) {
+        this.animation = animation;
+    }
     update(steps: number = 1) {
+
+        if (!!this.animation) {
+            this.animation.run(steps);
+        }
+
         this.icon_health.x = this.sprite.x;
         this.icon_health.y = this.sprite.y + AncientEmpires.TILE_SIZE - 7;
 
@@ -222,6 +249,18 @@ class Entity extends Sprite {
         this.icon_health.x = this.sprite.x;
         this.icon_health.y = this.sprite.y + AncientEmpires.TILE_SIZE - 7;
     }
+    raise(alliance: Alliance) {
+        this.type = EntityType.Skeleton;
+        this.alliance = alliance;
+        this.rank = 0;
+        this.ep = 0;
+        this.death_count = 0;
+        this.setHealth(10);
+        this.clearStatus(EntityStatus.Poisoned);
+        this.clearStatus(EntityStatus.Wisped);
+        this.updateState(EntityState.Moved, true);
+    }
+
     getMovement(): number {
         // if poisoned, less -> apply here
         return this.data.mov;
@@ -230,5 +269,20 @@ class Entity extends Sprite {
         this.icon_health.destroy();
         this.icon_moved.destroy();
         super.destroy();
+    }
+
+    export(): EntitySave {
+        return {
+            x: this.position.x,
+            y: this.position.y,
+            type: this.type,
+            alliance: this.alliance,
+            rank : this.rank,
+            ep: this.ep,
+            state: this.state,
+            status: this.status,
+            health: this.health,
+            death_count: this.death_count
+        };
     }
 }

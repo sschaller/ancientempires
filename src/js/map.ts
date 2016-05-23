@@ -14,6 +14,11 @@ interface IBuilding {
     position: Pos;
     alliance: Alliance;
 }
+interface BuildingSave {
+    x: number;
+    y: number;
+    alliance: Alliance;
+}
 
 class Map {
 
@@ -180,5 +185,23 @@ class Map {
     }
     getDefAt(position: Pos, entity: Entity) {
         return Map.getDefForTile(this.getTileAt(position), entity);
+    }
+    exportBuildingAlliances(): BuildingSave[] {
+        let exp: BuildingSave[] = [];
+        for (let building of this.buildings) {
+            if (building.alliance == Alliance.None) { continue; }
+            exp.push({
+                x: building.position.x,
+                y: building.position.y,
+                alliance: building.alliance
+            });
+        }
+        return exp;
+    }
+    isCampaign(): boolean {
+        return this.name.charAt(0) == "m";
+    }
+    getMap(): number {
+        return parseInt(this.name.charAt(1), 10);
     }
 }

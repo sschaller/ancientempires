@@ -30,11 +30,14 @@ class Loader extends Phaser.State {
         });
 
         PNGLoader.loadSpriteSheet(waiter, "tiles0", 24, 24);
+        PNGLoader.loadSpriteSheet(waiter, "stiles0", 10, 10);
         PNGLoader.loadSpriteSheet(waiter, "buildings", 24, 24, 3, 0);
         PNGLoader.loadSpriteSheet(waiter, "buildings", 24, 24, 3, 1);
         PNGLoader.loadSpriteSheet(waiter, "buildings", 24, 24, 3, 2);
         PNGLoader.loadSpriteSheet(waiter, "unit_icons", 24, 24, 0, 1);
         PNGLoader.loadSpriteSheet(waiter, "unit_icons", 24, 24, 0, 2);
+        PNGLoader.loadSpriteSheet(waiter, "unit_icons_s", 10, 10, 0, 1);
+        PNGLoader.loadSpriteSheet(waiter, "unit_icons_s", 10, 10, 0, 2);
         PNGLoader.loadSpriteSheet(waiter, "cursor", 26, 26);
         PNGLoader.loadSpriteSheet(waiter, "b_smoke");
         PNGLoader.loadSpriteSheet(waiter, "menu");
@@ -45,6 +48,7 @@ class Loader extends Phaser.State {
         PNGLoader.loadSpriteSheet(waiter, "redspark");
         PNGLoader.loadSpriteSheet(waiter, "spark");
         PNGLoader.loadSpriteSheet(waiter, "smoke");
+        PNGLoader.loadSpriteSheet(waiter, "status");
 
 
 
@@ -59,6 +63,7 @@ class Loader extends Phaser.State {
         PNGLoader.loadImage(waiter, "bridge_bg");
         PNGLoader.loadImage(waiter, "town_bg");
         PNGLoader.loadImage(waiter, "tombstone");
+        PNGLoader.loadImage(waiter, "mask");
 
         waiter.await();
 

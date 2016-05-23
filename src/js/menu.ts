@@ -60,6 +60,7 @@ class MenuDefInfo extends Frame {
     private tile_icon: Phaser.Image;
     private def_amount: AEFont;
     private entity_icon: Phaser.Image;
+    private status_icons: Phaser.Image[];
 
     constructor(group: Phaser.Group) {
         super();
@@ -68,10 +69,12 @@ class MenuDefInfo extends Frame {
         // draw content
         this.drawContent();
     }
-    updateContent(position: Pos, map: Map, entity: Entity) {
+    updateContent(position: Pos, map: Map, entity_manager: EntityManager) {
         // update information inside menu
 
         let tile = map.getTileAt(position);
+        let entity = entity_manager.getEntityAt(position);
+
         if (tile == Tile.House || tile == Tile.Castle) {
             let alliance = map.getAllianceAt(position);
             if (this.tile_icon.key != "buildings_" + (<number> alliance)) {
@@ -98,7 +101,7 @@ class MenuDefInfo extends Frame {
             this.updateSize(40, 52);
             this.entity_icon.visible = false;
         }
-
+        this.setStatusIcons(entity);
     }
     private drawContent() {
         // initialize content (sprites, text etc)
@@ -119,6 +122,24 @@ class MenuDefInfo extends Frame {
         this.entity_icon = this.group.game.add.image(35, 2, "unit_icons_1", null, this.content_group);
         this.entity_icon.visible = false;
 
+        this.status_icons = [
+            this.group.game.add.image(31, 22, "status", 2, this.content_group),
+            this.group.game.add.image(39, 22, "status", 2, this.content_group),
+            this.group.game.add.image(47, 22, "status", 2, this.content_group),
+            this.group.game.add.image(31, 32, "status", 0, this.content_group),
+            this.group.game.add.image(46, 32, "status", 1, this.content_group)
+        ];
+        this.setStatusIcons(null);
+    }
+    private setStatusIcons(entity: Entity) {
+        this.status_icons[0].visible = (entity && entity.rank > 0) ? true : false;
+        this.status_icons[1].visible = (entity && entity.rank > 1) ? true : false;
+        this.status_icons[2].visible = (entity && entity.rank > 2) ? true : false;
+
+        this.status_icons[3].visible = (entity && entity.status != EntityStatus.None) ? true : false;
+        this.status_icons[3].frame = (entity && (entity.status & EntityStatus.Poisoned) != 0) ? 0 : 1;
+
+        this.status_icons[4].visible = (entity && entity.status == (EntityStatus.Wisped | EntityStatus.Poisoned)) ? true : false;
     }
 }
 enum Action {
@@ -133,7 +154,16 @@ enum Action {
     OCCUPY,
     RAISE,
     MAP,
-    OBJECTIVE
+    OBJECTIVE,
+    NEW_GAME,
+    SELECT_LEVEL,
+    SAVE_GAME,
+    LOAD_GAME,
+    SKIRMISH,
+    SETTINGS,
+    INSTRUCTIONS,
+    ABOUT,
+    EXIT
 }
 class MenuOptions extends Frame {
 
@@ -147,15 +177,29 @@ class MenuOptions extends Frame {
 
     private menu_delegate: MenuDelegate;
 
-    static getMainMenuOptions(): Action[] {
+    static getMainMenuOptions(save: boolean): Action[] {
+        let options: Action[] = [Action.NEW_GAME, Action.SELECT_LEVEL, Action.LOAD_GAME, Action.SKIRMISH, Action.SETTINGS, Action.INSTRUCTIONS, Action.ABOUT, Action.EXIT];
+        if (save) {
+            options.unshift(Action.SAVE_GAME);
+        }
+        return options;
+    }
+    static getOffMenuOptions(): Action[] {
         return [Action.END_TURN, Action.MAP, Action.OBJECTIVE, Action.MAIN_MENU];
     }
     static getOptionString(option: Action): string {
         if (option == Action.None) { return ""; }
+        if (option >= 12) {
+            return AncientEmpires.LANG[(<number> option - 12 + 1)];
+        }
         return AncientEmpires.LANG[26 + <number> option];
     }
-    constructor (group: Phaser.Group, align: Direction, options: Action[], delegate: MenuDelegate) {
+    constructor (group: Phaser.Group, align: Direction, options: Action[], delegate: MenuDelegate, anim_direction?: Direction) {
         super();
+
+        if (!anim_direction) {
+            anim_direction = align;
+        }
 
         this.menu_delegate = delegate;
 
@@ -172,7 +216,7 @@ class MenuOptions extends Frame {
         let height = this.options.length * 13 + 16;
         let width = max_length * 7 + 31 + 13;
 
-        this.initialize(width, height, group, align, Direction.All & ~align, align);
+        this.initialize(width, height, group, align, Direction.All & ~align, anim_direction);
 
         this.drawContent();
     }
@@ -264,6 +308,7 @@ class MenuShopUnits extends Frame {
     menu_delegate: MenuDelegate;
 
     private entity_images: Phaser.Image[];
+    private masks: Phaser.Image[];
     private pointer: Phaser.Image;
     private pointer_state: number;
     private pointer_slow: number;
@@ -278,9 +323,13 @@ class MenuShopUnits extends Frame {
         // draw content
         this.drawContent();
     }
-    updateContent(alliance: Alliance) {
+    updateContent(alliance: Alliance, gold: number) {
+        let i = 0;
         for (let image of this.entity_images) {
+            let cost = AncientEmpires.ENTITIES[i].cost;
             image.loadTexture("unit_icons_" + (<number> alliance), image.frame);
+            this.masks[i].visible = cost > gold;
+            i++;
         }
     }
     getSelected(): EntityType {
@@ -291,7 +340,7 @@ class MenuShopUnits extends Frame {
         super.show(animate);
     }
     hide(animate: boolean = false, destroy_on_finish: boolean = false, update_on_finish: boolean = false) {
-        if (!!this.menu_delegate) { this.menu_delegate.openMenu(InputContext.Shop); }
+        if (!!this.menu_delegate) { this.menu_delegate.closeMenu(InputContext.Shop); }
         super.hide(animate, destroy_on_finish, update_on_finish);
     }
     update(steps: number) {
@@ -329,6 +378,7 @@ class MenuShopUnits extends Frame {
     private drawContent() {
 
         this.entity_images = [];
+        this.masks = [];
 
         for (let i = 0; i < AncientEmpires.ENTITIES.length; i++) {
 
@@ -341,6 +391,8 @@ class MenuShopUnits extends Frame {
 
             let image = this.group.game.add.image(x, y, "unit_icons_1", i, this.content_group);
             this.entity_images.push(image);
+            let mask = this.group.game.add.image(x, y, "mask", 0, this.content_group);
+            this.masks.push(mask);
         }
         this.pointer = this.group.game.add.image(4, 4, "pointer", null, this.content_group);
         this.pointer_state = 2;
@@ -349,7 +401,6 @@ class MenuShopUnits extends Frame {
 }
 
 class MenuShopInfo extends Frame {
-    group: Phaser.Group;
 
     private unit_icon: Phaser.Image;
     private unit_name: Phaser.BitmapText;
@@ -361,8 +412,6 @@ class MenuShopInfo extends Frame {
 
     constructor(group: Phaser.Group, alliance: Alliance) {
         super();
-
-        this.group = group;
 
         this.initialize(group.game.width - 64, group.game.height, group, Direction.Left, Direction.Up | Direction.Right | Direction.Down, Direction.Left);
         this.drawContent(alliance);

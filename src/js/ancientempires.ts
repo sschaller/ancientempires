@@ -17,6 +17,7 @@
 class AncientEmpires {
 
     static TILE_SIZE: number = 24;
+    static MINI_SIZE: number = 10;
     static ENTITIES: EntityData[];
 
     static LINE_SEGMENT_LENGTH = 10;

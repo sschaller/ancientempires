@@ -33,7 +33,7 @@ class MenuGoldInfo extends Frame {
 
         this.head_graphics.clear();
         this.head_graphics.beginFill(color);
-        this.head_graphics.drawRect(0, 17, this.width, 17);
+        this.head_graphics.drawRect(0, 17, this.width - 6, 17);
         this.head_graphics.endFill();
 
         this.head_icon.frame = frame;

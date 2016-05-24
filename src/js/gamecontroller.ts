@@ -9,11 +9,12 @@ enum InputContext {
 }
 interface GameSave {
     buildings: BuildingSave[];
-    entities: EntitySave[];
+    entities: IEntity[];
     map: number;
     campaign: boolean;
     turn: Alliance;
     gold: number[];
+    cursors: IPos[];
 }
 class GameController extends Phaser.State implements EntityManagerDelegate, MenuDelegate {
 
@@ -36,6 +37,8 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
 
     acc: number = 0;
+
+    private cursor_targets: Pos[];
     private cursor_target: Pos;
     private last_cursor_position: Pos;
 
@@ -59,13 +62,20 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
     init(name: string, save?: GameSave) {
         this.map = new Map(name);
         this.keys = new Input(this.game.input);
+        this.cursor_targets = [];
 
-        if (!!save) {
-            // TODO: save
-        }else {
+        try {
+            this.turn = save.turn;
+            this.gold = save.gold;
+            this.map.importBuildings(save.buildings);
+            this.map.importEntities(save.entities);
+            for (let target of save.cursors) {
+                this.cursor_targets.push(new Pos(target.x, target.y));
+            }
+        }catch (e) {
             this.turn = Alliance.Blue;
-            this.gold = [];
 
+            this.gold = [];
             if (name.charAt(0) == "s") {
                 this.gold[0] = 1000;
                 this.gold[1] = 1000;
@@ -92,16 +102,19 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
     }
     saveGame() {
 
+        let cursors: IPos[] = [];
+        for (let target of this.cursor_targets) {
+            cursors.push({x: target.x, y: target.y});
+        }
         let save: GameSave = {
             entities: this.entity_manager.exportEntities(),
             buildings: this.map.exportBuildingAlliances(),
             gold: this.gold,
             turn: this.turn,
             campaign: this.map.isCampaign(),
-            map: this.map.getMap()
+            map: this.map.getMap(),
+            cursors: cursors
         };
-
-        console.log(save);
 
         localStorage.setItem("save.rs", JSON.stringify(save));
 
@@ -137,13 +150,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.frame_manager.addFrame(this.frame_gold_info);
         this.frame_gold_info.show(true);
 
-        let spider = this.entity_manager.createEntity(EntityType.Spider, Alliance.Red, new Pos(4, 13));
-        spider.setHealth(6);
-        let wizard = this.entity_manager.createEntity(EntityType.Wizard, Alliance.Blue, new Pos(4, 14));
-        wizard.setHealth(9);
-
-        this.cursor_target = this.entity_manager.getKingPosition(Alliance.Blue);
-        this.cursor = new Sprite(this.cursor_target.getWorldPosition(), cursor_group, "cursor", [0, 1]);
+        this.cursor = new Sprite({x: 0, y: 0}, cursor_group, "cursor", [0, 1]);
         this.cursor.setOffset(-1, -1);
 
         this.camera.x = this.getOffsetX(this.cursor.world_position.x);
@@ -155,7 +162,11 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.context = [InputContext.Map];
         this.keys = new Input(this.game.input);
 
-        this.startTurn(Alliance.Blue);
+        if (this.cursor_targets.length < 1) {
+            this.cursor_targets.push(this.entity_manager.getKingPosition(Alliance.Blue));
+            this.cursor_targets.push(this.entity_manager.getKingPosition(Alliance.Red));
+        }
+        this.startTurn(this.turn);
 
         this.showMessage("GAME LOADED");
 
@@ -335,13 +346,25 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         if (this.turn == Alliance.Blue) {
             next_turn = Alliance.Red;
         }
-        this.startTurn(next_turn);
+
+        this.cursor_targets[this.turn == Alliance.Blue ? 0 : 1] = this.cursor_target;
+
+        this.entity_manager.nextTurn(next_turn);
+        this.startTurn(next_turn, true);
     }
 
-    private startTurn(alliance: Alliance) {
+    private startTurn(alliance: Alliance, animate: boolean = false) {
 
         this.turn = alliance;
-        this.entity_manager.startTurn(alliance);
+        this.cursor_target = this.cursor_targets[alliance == Alliance.Blue ? 0 : 1];
+
+        if (!animate) {
+            let wp = this.cursor_target.getWorldPosition();
+            this.cursor.setWorldPosition(wp);
+            this.camera.x = this.getOffsetX(wp.x);
+            this.camera.y = this.getOffsetX(wp.y);
+        }
+
         this.frame_gold_info.updateContent(alliance, this.getGoldForAlliance(alliance));
 
     }

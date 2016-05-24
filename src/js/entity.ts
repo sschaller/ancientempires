@@ -22,23 +22,18 @@ enum EntityFlags {
     CanWisp = 256,
     CantAttackAfterMoving = 512
 }
+
 interface IEntity {
     type: EntityType;
     alliance: Alliance;
-    position: Pos;
-}
-
-interface EntitySave {
-    x: number;
-    y: number;
-    type: EntityType;
-    alliance: Alliance;
-    rank: number;
-    ep: number;
-    state: EntityState;
-    status: EntityStatus;
-    health: number;
-    death_count: number;
+    x?: number;
+    y?: number;
+    rank?: number;
+    ep?: number;
+    state?: EntityState;
+    status?: EntityStatus;
+    health?: number;
+    death_count?: number;
 }
 enum EntityType {
     Soldier,
@@ -271,12 +266,12 @@ class Entity extends Sprite {
         super.destroy();
     }
 
-    export(): EntitySave {
+    export(): IEntity {
         return {
-            x: this.position.x,
-            y: this.position.y,
             type: this.type,
             alliance: this.alliance,
+            x: this.position.x,
+            y: this.position.y,
             rank : this.rank,
             ep: this.ep,
             state: this.state,

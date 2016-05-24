@@ -123,8 +123,19 @@ class Map {
             this.start_entities.push({
                 type: type,
                 alliance: alliance,
-                position: new Pos(x, y)
+                x: x,
+                y: y
             });
+        }
+    }
+    importEntities(entities: IEntity[]) {
+        this.start_entities = entities;
+    }
+    importBuildings(buildings: BuildingSave[]) {
+        for (let building of buildings) {
+            let match = this.getBuildingAt(new Pos(building.x, building.y));
+            if (!match) { continue; }
+            match.alliance = building.alliance;
         }
     }
     getTileAt(position: Pos): Tile {
@@ -160,12 +171,17 @@ class Map {
         }
         return false;
     }
-    getAllianceAt(position: Pos) {
+    getBuildingAt(position: Pos): IBuilding {
         for (let building of this.buildings){
             if (building.position.match(position)) {
-                return building.alliance;
+                return building;
             }
         }
+        return null;
+    }
+    getAllianceAt(position: Pos) {
+        let building = this.getBuildingAt(position);
+        if (!!building) { return building.alliance; }
         return Alliance.None;
     }
     getOccupiedHouses(): IBuilding[] {

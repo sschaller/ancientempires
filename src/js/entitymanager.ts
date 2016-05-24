@@ -59,7 +59,26 @@ class EntityManager {
 
         this.entities = [];
         for (let entity of map.getStartEntities()) {
-            this.createEntity(entity.type, entity.alliance, entity.position);
+            let e = this.createEntity(entity.type, entity.alliance, new Pos(entity.x, entity.y));
+            if (typeof entity.rank != "undefined") {
+                e.rank = entity.rank;
+            }
+            if (typeof entity.ep != "undefined") {
+                e.ep = entity.ep;
+            }
+            if (typeof entity.death_count != "undefined") {
+                e.death_count = entity.death_count;
+            }
+            if (typeof entity.status != "undefined") {
+                e.status = entity.status;
+                e.updateStatus();
+            }
+            if (typeof entity.health != "undefined") {
+                e.setHealth(entity.health);
+            }
+            if (typeof entity.state != "undefined") {
+                e.updateState(entity.state, true);
+            }
         }
 
         this.entity_range = new EntityRange(this.map, this, this.interaction_group);
@@ -99,7 +118,7 @@ class EntityManager {
         return new Pos(0, 0);
     }
 
-    startTurn(alliance: Alliance) {
+    nextTurn(alliance: Alliance) {
         for (let i = this.entities.length - 1; i >= 0; i--) {
             let entity = this.entities[i];
             if (entity.isDead()) {
@@ -387,8 +406,8 @@ class EntityManager {
         }
     }
 
-    exportEntities(): EntitySave[] {
-        let exp: EntitySave[] = [];
+    exportEntities(): IEntity[] {
+        let exp: IEntity[] = [];
         for (let entity of this.entities) {
             exp.push(entity.export());
         }

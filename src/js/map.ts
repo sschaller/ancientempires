@@ -193,6 +193,14 @@ class Map {
         }
         return houses;
     }
+    getGoldGainForAlliance(alliance: Alliance): number {
+        let gain = 0;
+        for (let building of this.buildings) {
+            if (building.alliance != alliance) { continue; }
+            gain += building.castle ? 50 : 30;
+        }
+        return gain;
+    }
     getStartEntities(): IEntity[] {
         return this.start_entities;
     }

@@ -349,6 +349,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
         this.cursor_targets[this.turn == Alliance.Blue ? 0 : 1] = this.cursor_target;
 
+        this.gold[next_turn == Alliance.Blue ? 0 : 1] += this.map.getGoldGainForAlliance(next_turn);
         this.entity_manager.nextTurn(next_turn);
         this.startTurn(next_turn, true);
     }
@@ -358,9 +359,10 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.turn = alliance;
         this.cursor_target = this.cursor_targets[alliance == Alliance.Blue ? 0 : 1];
 
+        let wp = this.cursor_target.getWorldPosition();
+        this.cursor.setWorldPosition(wp);
+        
         if (!animate) {
-            let wp = this.cursor_target.getWorldPosition();
-            this.cursor.setWorldPosition(wp);
             this.camera.x = this.getOffsetX(wp.x);
             this.camera.y = this.getOffsetX(wp.y);
         }

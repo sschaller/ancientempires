@@ -42,7 +42,9 @@ class Pos implements IPos {
         }
         return this;
     }
-
+    distanceTo (p: Pos): number {
+        return Math.abs(p.x - this.x) + Math.abs(p.y - this.y);
+    }
     getDirectionTo (p: Pos): Direction {
         if (p.x > this.x) { return Direction.Right; }
         if (p.x < this.x) { return Direction.Left; }
@@ -53,8 +55,8 @@ class Pos implements IPos {
     getWorldPosition() {
         return new Pos(this.x * AncientEmpires.TILE_SIZE, this.y * AncientEmpires.TILE_SIZE);
     }
-    getInfo() {
-        return "{x: " + this.x + ", y: " + this.y + "}";
+    getI(): IPos {
+        return {x: this.x, y: this.y};
     }
 }
 enum Direction {

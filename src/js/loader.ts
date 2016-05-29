@@ -1,3 +1,5 @@
+/// <reference path="pngloader.ts" />
+
 interface DataEntry {
     name: string;
     size: number;
@@ -28,6 +30,10 @@ class Loader extends Phaser.State {
         let waiter = new PNGWaiter(() => {
             this.game.state.start("MainMenu", false, false, name);
         });
+
+        PNGLoader.loadImage(waiter, "splash");
+        PNGLoader.loadImage(waiter, "splashbg");
+        PNGLoader.loadImage(waiter, "splashfg");
 
         PNGLoader.loadSpriteSheet(waiter, "tiles0", 24, 24);
         PNGLoader.loadSpriteSheet(waiter, "stiles0", 10, 10);

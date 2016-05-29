@@ -1,3 +1,13 @@
+/// <reference path="input.ts" />
+/// <reference path="player.ts" />
+/// <reference path="ai.ts" />
+/// <reference path="map.ts" />
+/// <reference path="tilemanager.ts" />
+/// <reference path="entitymanager.ts" />
+/// <reference path="smokemanager.ts" />
+/// <reference path="framemanager.ts" />
+/// <reference path="menu.ts" />
+
 enum InputContext {
     Wait,
     Shop,
@@ -5,20 +15,22 @@ enum InputContext {
     Map,
     Selection,
     Animation,
-    Ack
+    Ack,
+    Instructions
 }
 interface GameSave {
-    buildings: BuildingSave[];
-    entities: IEntity[];
-    map: number;
     campaign: boolean;
-    turn: Alliance;
-    gold: number[];
-    cursors: IPos[];
-}
-class GameController extends Phaser.State implements EntityManagerDelegate, MenuDelegate {
+    map: number;
+    players: boolean[];
 
-    keys: Input;
+    turn?: Alliance;
+    gold?: number[];
+    buildings?: IBuilding[];
+    entities?: IEntity[];
+    cursors?: IPos[];
+}
+class GameController extends Phaser.State implements EntityManagerDelegate, InteractionDelegate, MenuDelegate {
+
     map: Map;
 
     tile_manager: TileManager;
@@ -26,99 +38,79 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
     smoke_manager: SmokeManager;
     frame_manager: FrameManager;
 
-    frame_group: Phaser.Group;
     frame_gold_info: MenuGoldInfo;
     frame_def_info: MenuDefInfo;
 
     turn: Alliance;
     gold: number[];
 
+    players: Interaction[];
+
+    cursor_target: Pos;
     cursor: Sprite;
+    cursor_still: boolean;
+    camera_still: boolean;
 
+    game_over: boolean;
 
-    acc: number = 0;
-
-    private cursor_targets: Pos[];
-    private cursor_target: Pos;
+    private acc: number = 0;
     private last_cursor_position: Pos;
 
     private anim_cursor_state: number;
     private anim_cursor_slow: number;
 
-    private options_menu: MenuOptions;
-
     private selected_entity: Entity;
-    private last_entity_position: Pos;
-
-    private context: InputContext[];
-    private shop_units: MenuShopUnits;
-    private shop_info: MenuShopInfo;
-    private mini_map: MiniMap;
 
     constructor() {
         super();
     }
 
-    init(name: string, save?: GameSave) {
-        this.map = new Map(name);
-        this.keys = new Input(this.game.input);
-        this.cursor_targets = [];
+    init(save: GameSave) {
+        this.map = new Map((save.campaign ? "m" : "s") + save.map);
+        this.players = [];
+        this.game_over = false;
+
+        let keys: Input;
+        let alliance = Alliance.Blue;
+        for (let p of save.players) {
+            if (p) {
+                if (!keys) {
+                    keys = new Input(this.game.input);
+                }
+                this.players.push(new Player(alliance, this.map, this, keys));
+            } else {
+                this.players.push(new AI(alliance, this.map, this));
+            }
+            alliance = <Alliance> (<number> alliance + 1);
+        }
 
         try {
             this.turn = save.turn;
             this.gold = save.gold;
             this.map.importBuildings(save.buildings);
             this.map.importEntities(save.entities);
+
+            let i = 0;
             for (let target of save.cursors) {
-                this.cursor_targets.push(new Pos(target.x, target.y));
+                if (!!target) {
+                    this.players[i].cursor_position = new Pos(target.x, target.y);
+                }
+                i++;
             }
         }catch (e) {
             this.turn = Alliance.Blue;
 
             this.gold = [];
-            if (name.charAt(0) == "s") {
-                this.gold[0] = 1000;
-                this.gold[1] = 1000;
-            } else {
+            if (save.campaign) {
                 this.gold[0] = 300;
                 this.gold[1] = 300;
+            } else {
+                this.gold[0] = 1000;
+                this.gold[1] = 1000;
             }
         }
     }
-    loadGame(): boolean {
-        let data = localStorage.getItem("save.rs");
-        if (!data) {
-            return false;
-        }
-        if (typeof JSON.parse != "function") {
-            console.error("Browser does not support JSON.parse");
-            return false;
-        }
-        let save: GameSave = JSON.parse(data);
 
-        let name = (save.campaign ? "m" : "s") + save.map;
-        this.game.state.start("Game", true, false, name, save);
-        return true;
-    }
-    saveGame() {
-
-        let cursors: IPos[] = [];
-        for (let target of this.cursor_targets) {
-            cursors.push({x: target.x, y: target.y});
-        }
-        let save: GameSave = {
-            entities: this.entity_manager.exportEntities(),
-            buildings: this.map.exportBuildingAlliances(),
-            gold: this.gold,
-            turn: this.turn,
-            campaign: this.map.isCampaign(),
-            map: this.map.getMap(),
-            cursors: cursors
-        };
-
-        localStorage.setItem("save.rs", JSON.stringify(save));
-
-    }
     create() {
 
         let tilemap = this.game.add.tilemap();
@@ -129,28 +121,29 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         let interaction_group = this.game.add.group();
         let cursor_group = this.game.add.group();
         let animation_group = this.game.add.group();
-        this.frame_group = this.game.add.group();
-        this.frame_group.fixedToCamera = true;
+        let frame_group = this.game.add.group();
+        frame_group.fixedToCamera = true;
 
         this.tile_manager = new TileManager(this.map, tilemap, tilemap_group);
 
-        this.smoke_manager = new SmokeManager(this.map, smoke_group);
-
         this.entity_manager = new EntityManager(this.map, entity_group, selection_group, interaction_group, animation_group, this);
 
-        this.frame_manager = new FrameManager();
+        this.smoke_manager = new SmokeManager(this.map, smoke_group);
+        this.frame_manager = new FrameManager(frame_group);
+
 
         this.tile_manager.draw();
 
-        this.frame_def_info = new MenuDefInfo(this.frame_group);
+        this.frame_def_info = new MenuDefInfo(frame_group);
         this.frame_manager.addFrame(this.frame_def_info);
         this.frame_def_info.show(true);
 
-        this.frame_gold_info = new MenuGoldInfo(this.frame_group);
+        this.frame_gold_info = new MenuGoldInfo(frame_group);
         this.frame_manager.addFrame(this.frame_gold_info);
         this.frame_gold_info.show(true);
 
-        this.cursor = new Sprite({x: 0, y: 0}, cursor_group, "cursor", [0, 1]);
+        this.cursor = new Sprite();
+        this.cursor.init({x: 0, y: 0}, cursor_group, "cursor", [0, 1]);
         this.cursor.setOffset(-1, -1);
 
         this.camera.x = this.getOffsetX(this.cursor.world_position.x);
@@ -159,22 +152,10 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.anim_cursor_state = 0;
         this.anim_cursor_slow = 0;
 
-        this.context = [InputContext.Map];
-        this.keys = new Input(this.game.input);
-
-        if (this.cursor_targets.length < 1) {
-            this.cursor_targets.push(this.entity_manager.getKingPosition(Alliance.Blue));
-            this.cursor_targets.push(this.entity_manager.getKingPosition(Alliance.Red));
-        }
         this.startTurn(this.turn);
 
         this.showMessage("GAME LOADED");
 
-    }
-    showMessage(text: string) {
-        let menu = new Notification(this.frame_group, text, this);
-        this.frame_manager.addFrame(menu);
-        menu.show(true);
     }
     update() {
         // 1 step is 1/60 sec
@@ -185,10 +166,6 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         this.acc -= steps * 16;
         if (steps > 2) { steps = 2; }
 
-        this.keys.update();
-
-        this.captureInput();
-
         let cursor_position = this.cursor_target.getWorldPosition();
         let diff_x = cursor_position.x - this.cursor.world_position.x;
         let diff_y = cursor_position.y - this.cursor.world_position.y;
@@ -196,6 +173,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         let dx = 0;
         let dy = 0;
 
+        this.cursor_still = diff_x == 0 && diff_y == 0;
         if (diff_x != 0) {
             dx = Math.floor(diff_x / 4);
             if (dx < 0) {
@@ -218,22 +196,28 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
             }
             this.cursor.setWorldPosition({x: this.cursor.world_position.x + dx, y: this.cursor.world_position.y + dy});
         }
+        // track moving entity, otherwise cursor
+        this.updateOffsetForPosition(!!this.selected_entity && !!this.selected_entity.path ? this.selected_entity.world_position : this.cursor.world_position);
+
+        // input
+
+        this.checkWinLose();
+
+        if (!this.game_over) {
+            this.players[(<number> this.turn - 1)].run();
+            this.players[(<number> this.turn - 1)].setCursorPosition(this.cursor_target);
+        }
 
         if (!this.cursor_target.match(this.last_cursor_position)) {
             this.last_cursor_position = this.cursor_target.copy();
 
             // update def info
-            this.frame_def_info.updateContent(this.cursor_target, this.map, this.entity_manager);
+            this.frame_def_info.updateContent(this.cursor_target, this.map);
         }
-
-
-        // input
 
         this.frame_manager.update(steps);
 
-        if (this.context[this.context.length - 1] != InputContext.Map && this.context[this.context.length - 1] != InputContext.Selection && this.context[this.context.length - 1] != InputContext.Animation) {
-            return;
-        }
+        // Pause ANIMATION
 
         this.anim_cursor_slow += steps;
         if (this.anim_cursor_slow > 30) {
@@ -248,8 +232,6 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
         this.entity_manager.update(steps, this.cursor_target, this.anim_cursor_state);
 
-        this.updateOffsetForPosition(this.cursor.world_position);
-
         let info_is_right = (this.frame_gold_info.align & Direction.Right) != 0;
         if (!info_is_right && this.cursor.world_position.x - 1 - this.camera.x <= this.game.width / 2 - 24 - 12) {
             this.frame_gold_info.updateDirections(Direction.Up | Direction.Right, Direction.Left | Direction.Down, Direction.Right, true);
@@ -261,117 +243,128 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
 
     }
 
-    entityDidMove(entity: Entity) {
-        let options = this.entity_manager.getEntityOptions(entity, true);
-        if (options.length < 1) { return; }
-        this.showOptionMenu(options);
-    }
 
-    entityDidAnimation(entity: Entity) {
-        this.context.pop();
-        this.selected_entity.updateState(EntityState.Moved, true);
-        this.deselectEntity();
-    }
+    // -----------------------
+    // ---- MENU DELEGATE ----
+    // -----------------------
 
     openMenu(context: InputContext) {
-        if (context == InputContext.Wait) {
-            this.context.push(context);
-        } else if (context == InputContext.Shop) {
-            this.frame_def_info.hide(true);
-        } else {
-            this.frame_gold_info.hide(true);
-            this.frame_def_info.hide(true);
-        }
+        this.players[<number> this.turn - 1].openMenu(context);
     }
     closeMenu(context: InputContext) {
-        if (context == InputContext.Wait) {
-            this.context.pop();
-        }
-        let active_context = this.context[this.context.length - 1];
-        switch (active_context) {
-            case InputContext.Map:
-            case InputContext.Selection:
-                this.frame_gold_info.show(true);
-                this.frame_def_info.show(true);
-                break;
-            case InputContext.Shop:
-                this.frame_gold_info.show(true);
-                break;
+        for (let player of this.players) {
+            player.closeMenu(context);
         }
     }
 
-    private selectEntity(entity: Entity): boolean {
 
-        let options = this.entity_manager.getEntityOptions(entity, false);
+    // ---------------------------------
+    // ---- ENTITY MANAGER DELEGATE ----
+    // ---------------------------------
 
-        // no options mean: not in alliance or already moved
-        if (options.length < 1) {
-            return false;
+    entityDidMove(entity: Entity) {
+        this.players[<number> this.turn - 1].entityDidMove(entity);
+    }
+    entityDidAnimation(entity: Entity) {
+        this.players[<number> this.turn - 1].entityDidAnimation(entity);
+    }
+
+
+    // --------------
+    // ---- MENU ----
+    // --------------
+
+    showMessage(text: string) {
+        let menu = new Notification(this.frame_manager.group, text, this);
+        this.frame_manager.addFrame(menu);
+        menu.show(true);
+    }
+    showInfo(all: boolean) {
+        this.frame_def_info.show(true);
+        if (all) {
+            this.frame_gold_info.show(true);
         }
-
-        // so method can be used to show options for entity again -> must be same entity as selected
-        if (!this.selected_entity) {
-            this.selected_entity = entity;
-            this.entity_manager.selectEntity(entity);
-        } else if (this.selected_entity != entity) {
-            return false;
+    }
+    hideInfo(all: boolean) {
+        this.frame_def_info.hide(true);
+        if (all) {
+            this.frame_gold_info.hide(true);
         }
+    }
 
-        if (options.length > 1) {
-            this.showOptionMenu(options);
-        } else {
-            this.selectOption(options[0]);
+
+    // ---------------------
+    // ---- LOAD / SAVE ----
+    // ---------------------
+    loadGame(): boolean {
+        if (!MainMenu.loadGame(this.game)) {
+            this.showMessage(AncientEmpires.LANG[43]);
+            return false;
         }
         return true;
     }
-    private deselectEntity(changed: boolean = true) {
-        if (!this.selected_entity) { return; }
+    saveGame() {
 
-        this.cursor_target = this.selected_entity.position.copy();
-        this.entity_manager.hideRange();
+        let cursors: IPos[] = [];
+        let players: boolean[] = [];
+        for (let player of this.players) {
+            cursors.push(player.getCursorPosition());
+            players.push(player.isPlayer());
+        }
 
-        this.entity_manager.deselectEntity(this.selected_entity);
-        this.last_entity_position = null;
-        this.selected_entity = null;
+        let save: GameSave = {
+            campaign: this.map.isCampaign(),
+            map: this.map.getMap(),
+            turn: this.turn,
+            gold: this.gold,
+            players: players,
+            entities: this.map.exportEntities(),
+            buildings: this.map.exportBuildings(),
+            cursors: cursors
+        };
 
-        // if something changed
-        if (changed) {
-            this.entity_manager.resetWisp(this.turn, true);
-            this.frame_def_info.updateContent(this.cursor_target, this.map, this.entity_manager);
+        localStorage.setItem("save.rs", JSON.stringify(save));
+        this.showMessage(AncientEmpires.LANG[41]);
+    }
+    exitGame() {
+        this.game.state.start("MainMenu", true, false);
+    }
+
+
+    // -----------------
+    // ---- GENERAL ----
+    // -----------------
+
+    checkWinLose() {
+        if (this.game_over) {
+            return;
+        }
+        if (this.map.countEntitiesWith(Alliance.Blue, EntityState.Dead, EntityType.King) > 0) {
+            this.showMessage(AncientEmpires.LANG[38]);
+            this.game_over = true;
+        } else if (this.map.countEntitiesWith(Alliance.Red, EntityState.Dead, EntityType.King) > 0) {
+            this.showMessage(AncientEmpires.LANG[24]);
+            this.game_over = true;
         }
     }
 
-    private nextTurn() {
+    nextTurn() {
+
+        this.showMessage(AncientEmpires.LANG[40]);
+
         let next_turn = Alliance.Blue;
         if (this.turn == Alliance.Blue) {
             next_turn = Alliance.Red;
         }
-
-        this.cursor_targets[this.turn == Alliance.Blue ? 0 : 1] = this.cursor_target;
-
-        this.gold[next_turn == Alliance.Blue ? 0 : 1] += this.map.getGoldGainForAlliance(next_turn);
-        this.entity_manager.nextTurn(next_turn);
-        this.startTurn(next_turn, true);
-    }
-
-    private startTurn(alliance: Alliance, animate: boolean = false) {
-
-        this.turn = alliance;
-        this.cursor_target = this.cursor_targets[alliance == Alliance.Blue ? 0 : 1];
-
-        let wp = this.cursor_target.getWorldPosition();
-        this.cursor.setWorldPosition(wp);
-        
-        if (!animate) {
-            this.camera.x = this.getOffsetX(wp.x);
-            this.camera.y = this.getOffsetX(wp.y);
+        if (!this.players[<number> next_turn - 1].isActive()) {
+            next_turn = this.turn;
         }
 
-        this.frame_gold_info.updateContent(alliance, this.getGoldForAlliance(alliance));
-
+        this.gold[next_turn == Alliance.Blue ? 0 : 1] += this.map.getGoldGainForAlliance(next_turn);
+        this.map.nextTurn(next_turn);
+        this.startTurn(next_turn);
     }
-
-    private getGoldForAlliance(alliance: Alliance) {
+    getGoldForAlliance(alliance: Alliance) {
         switch (alliance) {
             case Alliance.Blue:
                 return this.gold[0];
@@ -380,7 +373,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         }
         return -1;
     }
-    private setGoldForAlliance(alliance: Alliance, amount: number) {
+    setGoldForAlliance(alliance: Alliance, amount: number) {
         let alliance_id: number;
         switch (alliance) {
             case Alliance.Blue:
@@ -396,99 +389,92 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         }
     }
 
-    private showOptionMenu(options: Action[]) {
 
-        this.options_menu = new MenuOptions(this.frame_group, Direction.Right, options, this);
-        this.frame_manager.addFrame(this.options_menu);
-        this.options_menu.show(true);
-        this.context.push(InputContext.Options);
+    // ------------------
+    // ---- ENTITITY ----
+    // ------------------
+
+    buyEntity(king: Entity, type: EntityType): Entity {
+        let data = AncientEmpires.ENTITIES[<number> type];
+        let gold = this.getGoldForAlliance(king.alliance) - data.cost;
+        if (gold < 0) {
+            return null;
+        }
+        this.setGoldForAlliance(king.alliance, gold);
+        let entity = this.map.createEntity(type, king.alliance, king.position.copy());
+        this.entity_manager.createEntity(entity);
+        return entity;
     }
-
-    private showMainMenu(actions: Action[]) {
-
-        this.options_menu = new MenuOptions(this.frame_group, Direction.None, actions, this, Direction.Up);
-        this.frame_manager.addFrame(this.options_menu);
-        this.options_menu.show(true);
-        this.context.push(InputContext.Options);
+    selectEntity(entity: Entity): boolean {
+        if (!!this.selected_entity) {
+            return false;
+        }
+        this.selected_entity = entity;
+        this.entity_manager.selectEntity(entity);
+        return true;
     }
+    moveEntity(entity: Entity, target: Pos, animate: boolean): boolean {
+        if (this.map.moveEntity(entity, target, this, animate)) {
+            this.hideRange();
+            return true;
+        }
+        return false;
+    }
+    occupy(position: Pos, alliance: Alliance) {
+        this.map.setAllianceAt(position, alliance);
+        this.tile_manager.drawTileAt(position);
+        this.showMessage(AncientEmpires.LANG[39]);
+    }
+    showRange(type: EntityRangeType, entity: Entity): EntityRange {
+        this.map.showRange(type, entity);
+        this.entity_manager.showRange();
+        return this.map.entity_range;
+    }
+    hideRange() {
+        this.entity_manager.hideRange();
+    }
+    attackEntity(entity: Entity, target: Entity) {
+        this.entity_manager.attackEntity(entity, target);
+    }
+    raiseEntity(wizard: Entity, dead: Entity) {
+        this.entity_manager.raiseEntity(wizard, dead);
+    }
+    deselectEntity(changed: boolean) {
+        if (!this.selected_entity) { return; }
 
-    private selectOption(option: Action) {
-        switch (option) {
-            case Action.OCCUPY:
-                this.map.setAllianceAt(this.selected_entity.position, this.selected_entity.alliance);
-                this.tile_manager.drawTileAt(this.selected_entity.position);
-                this.showMessage("OCCUPIED");
-                this.selected_entity.updateState(EntityState.Moved, true);
-                this.deselectEntity();
-                break;
-            case Action.ATTACK:
-                this.context.push(InputContext.Selection);
+        this.cursor_target = this.selected_entity.position.copy();
+        this.hideRange();
 
-                this.entity_manager.showRange(EntityRangeType.Attack, this.selected_entity);
-                this.cursor_target = this.entity_manager.nextTargetInRange(Direction.None).position.copy();
-                this.cursor.hide();
-                break;
-            case Action.RAISE:
-                this.context.push(InputContext.Selection);
-                this.entity_manager.showRange(EntityRangeType.Raise, this.selected_entity);
-                this.cursor_target = this.entity_manager.nextTargetInRange(Direction.None).position.copy();
-                break;
-            case Action.MOVE:
-                this.entity_manager.showRange(EntityRangeType.Move, this.selected_entity);
-                break;
-            case Action.BUY:
-                this.openShop(this.selected_entity.alliance);
-                break;
-            case Action.END_MOVE:
-                this.selected_entity.updateState(EntityState.Moved, true);
-                this.deselectEntity();
-                break;
-            case Action.END_TURN:
-                this.showMessage("END TURN");
-                this.nextTurn();
-                break;
-            case Action.MAIN_MENU:
-                this.showMainMenu(MenuOptions.getMainMenuOptions(true));
-                break;
-            case Action.MAP:
-                this.openMap();
-                break;
-            case Action.SAVE_GAME:
-                this.saveGame();
-                this.showMessage(AncientEmpires.LANG[41]);
-                break;
-            case Action.LOAD_GAME:
-                this.loadGame();
-                break;
-            case Action.SELECT_LEVEL:
+        this.entity_manager.deselectEntity(this.selected_entity);
+        this.selected_entity = null;
 
-                break;
-            case Action.SKIRMISH:
-
-                break;
-            case Action.EXIT:
-                this.game.state.start("MainMenu", true, false);
-                break;
-            case Action.CANCEL:
-                if (!!this.last_entity_position) {
-                    // last action was walking. reset entity & set cursor to current position
-                    this.cursor_target = this.selected_entity.position;
-
-                    this.entity_manager.moveEntity(this.selected_entity, this.last_entity_position, false);
-                    this.last_entity_position = null;
-
-                    this.entity_manager.showRange(EntityRangeType.Move, this.selected_entity);
-
-                } else {
-                    this.deselectEntity(false);
-                }
-                break;
-            default:
-                console.log("Action " + MenuOptions.getOptionString(option) + " not yet implemented");
-                break;
+        // if something changed
+        if (changed) {
+            this.map.resetWisp(this.turn);
+            this.entity_manager.showWisped();
+            this.frame_def_info.updateContent(this.cursor_target, this.map);
         }
     }
 
+
+    // -------------------------
+    // ---- PRIVATE GENERAL ----
+    // -------------------------
+
+    private startTurn(alliance: Alliance) {
+
+        this.turn = alliance;
+
+        let player = this.players[<number> alliance - 1];
+        player.start();
+        this.cursor_target = player.getCursorPosition();
+
+        let wp = this.cursor_target.getWorldPosition();
+        this.cursor.setWorldPosition(wp);
+
+        this.frame_gold_info.updateContent(alliance, this.getGoldForAlliance(alliance));
+
+    }
     private updateOffsetForPosition(position: IPos) {
         let x = position.x + 0.5 * AncientEmpires.TILE_SIZE;
         let y = position.y + 0.5 * AncientEmpires.TILE_SIZE;
@@ -502,6 +488,7 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
         let diff_x = offset_x - this.camera.x;
         let diff_y = offset_y - this.camera.y;
 
+        this.camera_still = diff_x == 0 && diff_y == 0;
         if (diff_x != 0) {
             let dx = Math.floor(diff_x / 12);
             if (dx < 0) {
@@ -544,215 +531,5 @@ class GameController extends Phaser.State implements EntityManagerDelegate, Menu
             offset_y = (this.game.height - this.world.height) / 2;
         }
         return offset_y;
-    }
-    private captureInput() {
-
-        if (this.keys.all_keys == Key.None) { return; }
-
-        switch (this.context[this.context.length - 1]) {
-            case InputContext.Map:
-                let cursor_still = this.cursor.world_position.x % 24 == 0 && this.cursor.world_position.y % 24 == 0;
-                if (this.keys.isKeyPressed(Key.Up) && cursor_still && this.cursor_target.y > 0) {
-                    this.cursor_target.move(Direction.Up);
-                } else if (this.keys.isKeyPressed(Key.Right) && cursor_still && this.cursor_target.x < this.map.width - 1) {
-                    this.cursor_target.move(Direction.Right);
-                } else if (this.keys.isKeyPressed(Key.Down) && cursor_still && this.cursor_target.y < this.map.height - 1) {
-                    this.cursor_target.move(Direction.Down);
-                } else if (this.keys.isKeyPressed(Key.Left) && cursor_still && this.cursor_target.x > 0) {
-                    this.cursor_target.move(Direction.Left);
-                } else if (this.keys.isKeyPressed(Key.Enter)) {
-                    this.keys.clearKeyPressed(Key.Enter);
-                    this.pickPosition(this.cursor_target);
-                } else if (this.keys.isKeyPressed(Key.Esc)) {
-                    this.keys.clearKeyPressed(Key.Esc);
-                    let entity = this.selected_entity;
-                    this.deselectEntity(false);
-                    if (!!entity && entity.position.match(this.entity_manager.getKingPosition(this.turn)) && entity.data.cost <= 1000) {
-                        // entity was bought, add gold back and remove entity
-                        let gold = this.getGoldForAlliance(this.turn);
-                        this.setGoldForAlliance(this.turn, gold + entity.data.cost);
-                        this.entity_manager.removeEntity(entity);
-                    }
-
-                }
-                break;
-            case InputContext.Options:
-                if (this.keys.isKeyPressed(Key.Up)) {
-                    this.keys.clearKeyPressed(Key.Up);
-                    this.options_menu.prev();
-                } else if (this.keys.isKeyPressed(Key.Down)) {
-                    this.keys.clearKeyPressed(Key.Down);
-                    this.options_menu.next();
-                } else if (this.keys.isKeyPressed(Key.Enter)) {
-                    this.keys.clearKeyPressed(Key.Enter);
-
-                    let selected = this.options_menu.getSelected();
-
-                    this.context.pop();
-                    this.options_menu.hide(true, true);
-                    this.options_menu = null;
-
-                    this.selectOption(selected);
-                } else if (this.keys.isKeyPressed(Key.Esc)) {
-                    this.keys.clearKeyPressed(Key.Esc);
-
-                    this.context.pop();
-                    this.options_menu.hide(true, true);
-                    this.options_menu = null;
-                    this.selectOption(Action.CANCEL);
-                }
-                break;
-            case InputContext.Selection:
-                if (this.keys.isKeyPressed(Key.Up) && this.cursor_target.y > 0) {
-                    this.keys.clearKeyPressed(Key.Up);
-                    let entity = this.entity_manager.nextTargetInRange(Direction.Up);
-                    this.cursor_target = entity.position.copy();
-                } else if (this.keys.isKeyPressed(Key.Right) && this.cursor_target.x < this.map.width - 1) {
-                    this.keys.clearKeyPressed(Key.Right);
-                    let entity = this.entity_manager.nextTargetInRange(Direction.Right);
-                    this.cursor_target = entity.position.copy();
-                } else if (this.keys.isKeyPressed(Key.Down) && this.cursor_target.y < this.map.height - 1) {
-                    this.keys.clearKeyPressed(Key.Down);
-                    let entity = this.entity_manager.nextTargetInRange(Direction.Down);
-                    this.cursor_target = entity.position.copy();
-                } else if (this.keys.isKeyPressed(Key.Left) && this.cursor_target.x > 0) {
-                    this.keys.clearKeyPressed(Key.Left);
-                    let entity = this.entity_manager.nextTargetInRange(Direction.Left);
-                    this.cursor_target = entity.position.copy();
-                } else if (this.keys.isKeyPressed(Key.Enter)) {
-                    this.keys.clearKeyPressed(Key.Enter);
-
-                    this.cursor.show();
-                    this.context.pop();
-                    let entity = this.entity_manager.nextTargetInRange(Direction.None);
-                    this.pickEntity(entity);
-                } else if (this.keys.isKeyPressed(Key.Esc)) {
-                    this.keys.clearKeyPressed(Key.Esc);
-
-                    this.cursor_target = this.selected_entity.position.copy();
-                    this.cursor.show();
-                    this.context.pop();
-                    let entity = this.selected_entity;
-                    this.entity_manager.hideRange();
-
-                    this.selectEntity(entity);
-                }
-                break;
-            case InputContext.Shop:
-                if (this.keys.isKeyPressed(Key.Up)) {
-                    this.keys.clearKeyPressed(Key.Up);
-                    this.shop_units.prev(true);
-                    this.shop_info.updateContent(this.shop_units.getSelected());
-                } else if (this.keys.isKeyPressed(Key.Right)) {
-                    this.keys.clearKeyPressed(Key.Right);
-                    this.shop_units.next(false);
-                    this.shop_info.updateContent(this.shop_units.getSelected());
-                } else if (this.keys.isKeyPressed(Key.Down)) {
-                    this.keys.clearKeyPressed(Key.Down);
-                    this.shop_units.next(true);
-                    this.shop_info.updateContent(this.shop_units.getSelected());
-                } else if (this.keys.isKeyPressed(Key.Left)) {
-                    this.keys.clearKeyPressed(Key.Left);
-                    this.shop_units.prev(false);
-                    this.shop_info.updateContent(this.shop_units.getSelected());
-                } else if (this.keys.isKeyPressed(Key.Enter)) {
-                    this.keys.clearKeyPressed(Key.Enter);
-                    let entity_type: number = this.shop_units.getSelected();
-                    let data = AncientEmpires.ENTITIES[entity_type];
-                    let gold = this.getGoldForAlliance(this.turn) - data.cost;
-                    if (gold >= 0) {
-                        this.deselectEntity(false);
-                        this.closeShop();
-                        this.setGoldForAlliance(this.turn, gold);
-                        let entity = this.entity_manager.createEntity(entity_type, this.turn, this.entity_manager.getKingPosition(this.turn));
-                        this.selectEntity(entity);
-                    }
-                } else if (this.keys.isKeyPressed(Key.Esc)) {
-                    this.keys.clearKeyPressed(Key.Esc);
-                    this.deselectEntity(false);
-                    this.closeShop();
-                }
-                break;
-            case InputContext.Ack:
-                if (this.keys.isKeyPressed(Key.Enter)) {
-                    this.keys.clearKeyPressed(Key.Enter);
-                    this.closeMap();
-                } else if (this.keys.isKeyPressed(Key.Esc)) {
-                    this.keys.clearKeyPressed(Key.Esc);
-                    this.closeMap();
-                }
-                break;
-        }
-    }
-
-    private pickEntity(entity: Entity) {
-
-        this.context.push(InputContext.Animation);
-        switch (this.entity_manager.getTypeOfRange()) {
-            case EntityRangeType.Attack:
-                this.entity_manager.attackEntity(this.selected_entity, entity);
-                break;
-            case EntityRangeType.Raise:
-                this.entity_manager.raiseEntity(this.selected_entity, entity);
-                break;
-        }
-        this.entity_manager.hideRange();
-        this.cursor.show();
-    }
-
-    private pickPosition(position: Pos) {
-        if (this.selected_entity) {
-            switch (this.entity_manager.getTypeOfRange()) {
-                case EntityRangeType.Move:
-                    this.last_entity_position = this.selected_entity.position.copy();
-                    this.entity_manager.moveEntity(this.selected_entity, position);
-                    break;
-            }
-            return;
-        }
-
-        let entity = this.entity_manager.getEntityAt(position);
-        if (!!entity) {
-            // no entity selected, clicked on entity - try to select it
-            let success = this.selectEntity(entity);
-            if (success) { return; }
-        }
-        this.showOptionMenu(MenuOptions.getOffMenuOptions());
-    }
-
-    private openShop(alliance: Alliance) {
-        this.context.push(InputContext.Shop);
-        if (!this.shop_units) {
-            this.shop_units = new MenuShopUnits(this.frame_group, this);
-            this.frame_manager.addFrame(this.shop_units);
-        }
-        this.shop_units.updateContent(alliance, this.getGoldForAlliance(alliance));
-        this.shop_units.show(true);
-
-        this.shop_info = new MenuShopInfo(this.frame_group, alliance);
-        this.shop_info.updateContent(EntityType.Soldier);
-        this.frame_manager.addFrame(this.shop_info);
-        this.shop_info.show(true);
-    }
-
-    private closeShop() {
-        this.context.pop();
-        this.shop_units.hide(true, true);
-        this.shop_units = null;
-        this.shop_info.hide(true, true);
-        this.shop_info = null;
-    }
-
-    private openMap() {
-        this.context.push(InputContext.Ack);
-        this.mini_map = new MiniMap(this.map, this.entity_manager, this.frame_group, this);
-        this.frame_manager.addFrame(this.mini_map);
-        this.mini_map.show(true);
-    }
-
-    private closeMap() {
-        this.context.pop();
-        this.mini_map.hide(true, true);
-        this.mini_map = null;
     }
 }

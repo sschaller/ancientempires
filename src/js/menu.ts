@@ -1,3 +1,6 @@
+/// <reference path="frame.ts" />
+/// <reference path="aefont.ts" />
+
 interface MenuDelegate {
     openMenu(context: InputContext): void;
     closeMenu(context: InputContext): void;
@@ -69,11 +72,11 @@ class MenuDefInfo extends Frame {
         // draw content
         this.drawContent();
     }
-    updateContent(position: Pos, map: Map, entity_manager: EntityManager) {
+    updateContent(position: Pos, map: Map) {
         // update information inside menu
 
         let tile = map.getTileAt(position);
-        let entity = entity_manager.getEntityAt(position);
+        let entity = map.getEntityAt(position);
 
         if (tile == Tile.House || tile == Tile.Castle) {
             let alliance = map.getAllianceAt(position);
@@ -88,7 +91,7 @@ class MenuDefInfo extends Frame {
             this.tile_icon.frame = TileManager.getBaseImageIndexForTile(tile);
         }
 
-        this.def_amount.setText(Map.getDefForTile(tile, entity).toString());
+        this.def_amount.setText(Map.getDefForTile(tile, entity ? entity.type : undefined).toString());
 
         if (!!entity && !entity.isDead()) {
             this.updateSize(68, 52);
@@ -177,10 +180,12 @@ class MenuOptions extends Frame {
 
     private menu_delegate: MenuDelegate;
 
-    static getMainMenuOptions(save: boolean): Action[] {
-        let options: Action[] = [Action.NEW_GAME, Action.SELECT_LEVEL, Action.LOAD_GAME, Action.SKIRMISH, Action.SETTINGS, Action.INSTRUCTIONS, Action.ABOUT, Action.EXIT];
-        if (save) {
-            options.unshift(Action.SAVE_GAME);
+    static getMainMenuOptions(ingame: boolean): Action[] {
+        let options: Action[];
+        if (ingame) {
+            options = [Action.SAVE_GAME, Action.LOAD_GAME, Action.INSTRUCTIONS, Action.ABOUT, Action.EXIT];
+        } else {
+            options = [Action.NEW_GAME, Action.LOAD_GAME, Action.SKIRMISH, Action.INSTRUCTIONS, Action.ABOUT, Action.EXIT];
         }
         return options;
     }
@@ -239,9 +244,9 @@ class MenuOptions extends Frame {
         if (!!this.menu_delegate) { this.menu_delegate.closeMenu(InputContext.Options); }
         super.hide(animate, destroy_on_finish, update_on_finish);
     }
-    show(animate: boolean = false) {
+    show(animate: boolean = false, offset_y: number = 0) {
         if (!!this.menu_delegate) { this.menu_delegate.openMenu(InputContext.Options); }
-        super.show(animate);
+        super.show(animate, offset_y);
     }
     next() {
         this.selected++;
@@ -256,6 +261,90 @@ class MenuOptions extends Frame {
         }
     }
     getSelected(): Action {
+        return this.options[this.selected];
+    }
+    update(steps: number) {
+        super.update(steps);
+
+        this.pointer_slow++;
+        if (this.pointer_slow > 10) {
+            this.pointer_slow = 0;
+            this.pointer_state = 2 - this.pointer_state;
+        }
+
+        this.pointer.y = 4 + this.selected * 13;
+        this.pointer.x = 4 + this.pointer_state;
+    }
+}
+
+class MenuSelect extends Frame {
+
+    selected: number;
+
+    private options: string[];
+    private fonts: Phaser.BitmapText[];
+    private pointer: Phaser.Image;
+    private pointer_state: number;
+    private pointer_slow: number;
+
+    private menu_delegate: MenuDelegate;
+
+    constructor (options: string[], group: Phaser.Group, delegate: MenuDelegate, align: Direction, anim_direction?: Direction) {
+        super();
+
+        this.menu_delegate = delegate;
+
+        this.options = options;
+        this.selected = 0;
+
+        let max_length = 0;
+        for (let text of this.options) {
+            if (text.length > max_length) {
+                max_length = text.length;
+            }
+        }
+        let height = this.options.length * 13 + 16;
+        let width = max_length * 7 + 31 + 13;
+
+        this.initialize(width, height, group, align, Direction.All & ~align, anim_direction);
+
+        this.drawContent();
+    }
+    drawContent() {
+        let y = 5;
+        this.fonts = [];
+        for (let text of this.options) {
+            let font = this.group.game.add.bitmapText(25, y, "font7", text, 7, this.content_group);
+            this.fonts.push(font);
+            y += 13;
+        }
+
+        this.pointer = this.group.game.add.image(4, 4, "pointer", null, this.content_group);
+        this.pointer_state = 2;
+        this.pointer_slow = 0;
+
+    }
+    hide(animate: boolean = false, destroy_on_finish: boolean = false, update_on_finish: boolean = false) {
+        if (!!this.menu_delegate) { this.menu_delegate.closeMenu(InputContext.Options); }
+        super.hide(animate, destroy_on_finish, update_on_finish);
+    }
+    show(animate: boolean = false, offset_y: number = 0) {
+        if (!!this.menu_delegate) { this.menu_delegate.openMenu(InputContext.Options); }
+        super.show(animate, offset_y);
+    }
+    next() {
+        this.selected++;
+        if (this.selected >= this.options.length) {
+            this.selected = 0;
+        }
+    }
+    prev() {
+        this.selected--;
+        if (this.selected < 0) {
+            this.selected = this.options.length - 1;
+        }
+    }
+    getSelected(): string {
         return this.options[this.selected];
     }
     update(steps: number) {

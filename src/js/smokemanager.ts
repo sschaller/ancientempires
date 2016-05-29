@@ -1,3 +1,5 @@
+/// <reference path="smoke.ts" />
+
 class SmokeManager {
     smoke: Smoke[];
     map: Map;

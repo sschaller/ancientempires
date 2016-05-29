@@ -1,17 +1,17 @@
+/// <reference path="frame.ts" />
+
 class MiniMap extends Frame {
 
     private entities: Phaser.Image[];
-    private entity_manager: EntityManager;
     private menu_delegate: MenuDelegate;
     private map: Map;
 
     private slow: number;
     private units_visible: boolean;
 
-    constructor(map: Map, entity_manager: EntityManager, group: Phaser.Group, menu_delegate: MenuDelegate) {
+    constructor(map: Map, group: Phaser.Group, menu_delegate: MenuDelegate) {
         super();
         this.map = map;
-        this.entity_manager = entity_manager;
         this.menu_delegate = menu_delegate;
 
         this.slow = 0;
@@ -50,7 +50,7 @@ class MiniMap extends Frame {
         }
 
         this.entities = [];
-        for (let entity of this.entity_manager.entities) {
+        for (let entity of this.map.entities) {
             let image = this.group.game.add.image(entity.position.x * AncientEmpires.MINI_SIZE, entity.position.y * AncientEmpires.MINI_SIZE, "unit_icons_s_" + (<number> entity.alliance), <number> entity.type, this.content_group);
             this.entities.push(image);
         }

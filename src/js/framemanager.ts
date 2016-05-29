@@ -1,7 +1,11 @@
+/// <reference path="frame.ts" />
+
 class FrameManager implements FrameDelegate {
     frames: Frame[];
+    group: Phaser.Group;
 
-    constructor() {
+    constructor(group: Phaser.Group) {
+        this.group = group;
         this.frames = [];
     }
     addFrame(frame: Frame) {

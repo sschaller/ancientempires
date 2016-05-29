@@ -109,9 +109,10 @@ class Frame {
         this.current = this.getRetractedRect();
     }
 
-    show(animate: boolean = false) {
+    show(animate: boolean = false, offset_y: number = 0) {
         this.animation = FrameAnimation.None;
-        this.target = this.getAlignmentRect();
+
+        this.target = this.getAlignmentRect(offset_y);
 
         if (animate) {
             // calculate starting offset using the anim_direction
@@ -315,7 +316,7 @@ class Frame {
         this.show(this.new_animate);
     }
 
-    private getAlignmentRect(): FrameRect {
+    private getAlignmentRect(offset_y: number = 0): FrameRect {
         // calculate the offset using the alignment
         let rect = Frame.getRect(0, 0, this.width, this.height);
         if ((this.align & Direction.Left) != 0) {
@@ -324,6 +325,11 @@ class Frame {
             rect.x = this.game_width - this.width;
         } else {
             rect.x = Math.floor((this.game_width - this.width) / 2);
+        }
+        // exception for main menu ..
+        if (offset_y > 0) {
+            rect.y = offset_y;
+            return rect;
         }
         if ((this.align & Direction.Up) != 0) {
             rect.y = 0;

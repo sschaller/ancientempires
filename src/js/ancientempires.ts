@@ -1,19 +1,9 @@
 /// <reference path="vendor/phaser.d.ts" />
 /// <reference path="util.ts" />
+/// <reference path="sprite.ts" />
 /// <reference path="loader.ts" />
-/// <reference path="pngloader.ts" />
 /// <reference path="mainmenu.ts" />
 /// <reference path="gamecontroller.ts" />
-/// <reference path="map.ts" />
-/// <reference path="tilemanager.ts" />
-/// <reference path="entitymanager.ts" />
-/// <reference path="entityrange.ts" />
-/// <reference path="smokemanager.ts" />
-/// <reference path="sprite.ts" />
-/// <reference path="smoke.ts" />
-/// <reference path="entity.ts" />
-/// <reference path="frame.ts" />
-/// <reference path="aefont.ts" />
 class AncientEmpires {
 
     static TILE_SIZE: number = 24;

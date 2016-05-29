@@ -8,8 +8,7 @@ class Sprite {
     private offset_y: number;
     private frame: number;
 
-    constructor(world_position: IPos, group: Phaser.Group, name: string, frames: number[] = []) {
-
+    init(world_position: IPos, group: Phaser.Group, name: string, frames: number[] = []) {
         this.world_position = world_position;
 
         this.offset_x = 0;
@@ -21,7 +20,6 @@ class Sprite {
         this.sprite = group.game.add.sprite(this.world_position.x, this.world_position.y, this.name);
         this.sprite.frame = this.frames[0];
         group.add(this.sprite);
-
     }
     setFrames(frames: number[], frame: number = 0) {
         this.frames = frames;

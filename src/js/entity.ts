@@ -1,3 +1,5 @@
+/// <reference path="animation.ts" />
+
 interface EntityData {
     name: string;
     mov: number;
@@ -59,6 +61,13 @@ enum EntityState {
     Dead = 2
 }
 
+interface EntityPath {
+    delegate: EntityManagerDelegate;
+    line: LinePart[];
+    target: Pos;
+    progress: number;
+}
+
 class Entity extends Sprite {
 
     type: EntityType;
@@ -81,12 +90,14 @@ class Entity extends Sprite {
     def_boost: number = 0;
     mov_boost: number = 0;
 
+    path: EntityPath;
     animation: EntityAnimation;
+
     status_animation: number;
     private icon_moved: Phaser.Image;
 
-    constructor(type: EntityType, alliance: Alliance, position: Pos, group: Phaser.Group) {
-        super(position.getWorldPosition(), group, "unit_icons_" + (<number> alliance), [type, type + AncientEmpires.ENTITIES.length]);
+    constructor(type: EntityType, alliance: Alliance, position: Pos) {
+        super();
 
         this.data = AncientEmpires.ENTITIES[type];
         this.alliance = alliance;
@@ -102,6 +113,9 @@ class Entity extends Sprite {
         this.state = EntityState.Ready;
 
         this.status_animation = -1;
+    }
+    init(group: Phaser.Group) {
+         super.init(this.position.getWorldPosition(), group, "unit_icons_" + (<number> this.alliance), [this.type, this.type + AncientEmpires.ENTITIES.length]);
 
         this.icon_moved = group.game.add.image(0, 0, "chars", 4, group);
         this.icon_moved.visible = false;
@@ -116,7 +130,7 @@ class Entity extends Sprite {
         return (this.data.flags & flag) != 0;
     }
     getDistanceToEntity(entity: Entity): number {
-        return Math.abs(entity.position.x - this.position.x) + Math.abs(entity.position.y - this.position.y);
+        return this.position.distanceTo(entity.position);
     }
     shouldRankUp(): boolean {
         if (this.rank < 3 && this.ep >= 75 << this.rank) {
@@ -167,7 +181,7 @@ class Entity extends Sprite {
             def -= 1;
         }
 
-        let red_health = Math.floor((atk - (def + map.getDefAt(target.position, target)) * (2 / 3)) * this.health / 10);
+        let red_health = Math.floor((atk - (def + map.getDefAt(target.position, target.type)) * (2 / 3)) * this.health / 10);
         if (red_health > target.health) {
             red_health = target.health;
         }
@@ -196,8 +210,8 @@ class Entity extends Sprite {
         this.status &= ~status;
         this.updateStatus();
     }
-    getInfo() {
-        return this.data.name + ", alliance " + this.alliance + ": " + this.position.x + " - " + this.position.y;
+    getPowerEstimate(position: Pos, map: Map): number {
+        return Math.floor((this.rank + this.data.atk + this.data.def + map.getDefAt(position, this.type)) * this.health);
     }
 
     updateState(state: EntityState, show: boolean) {
@@ -222,16 +236,42 @@ class Entity extends Sprite {
     startAnimation(animation: EntityAnimation) {
         this.animation = animation;
     }
+    move(target: Pos, line: LinePart[], delegate: EntityManagerDelegate) {
+        this.path = {
+            progress: 0,
+            line: line,
+            delegate: delegate,
+            target: target
+        };
+    }
     update(steps: number = 1) {
+        super.update(steps);
 
-        if (!!this.animation) {
+        if (!!this.path) {
+            this.path.progress += steps;
+
+            // first check is so we can stay at the same place
+            if (this.path.line.length > 0 && this.path.progress >= this.path.line[0].length * AncientEmpires.TILE_SIZE) {
+                this.path.progress -= this.path.line[0].length * AncientEmpires.TILE_SIZE;
+                this.path.line.shift();
+            }
+            if (this.path.line.length > 0) {
+                let diff = new Pos(0, 0).move(this.path.line[0].direction);
+                this.world_position.x = this.path.line[0].position.x * AncientEmpires.TILE_SIZE + diff.x * this.path.progress;
+                this.world_position.y = this.path.line[0].position.y * AncientEmpires.TILE_SIZE + diff.y * this.path.progress;
+            } else {
+                this.position = this.path.target;
+                this.world_position = this.path.target.getWorldPosition();
+                let delegate = this.path.delegate;
+                this.path = null;
+                delegate.entityDidMove(this);
+            }
+        }else if (!!this.animation) {
             this.animation.run(steps);
         }
 
         this.icon_health.x = this.sprite.x;
         this.icon_health.y = this.sprite.y + AncientEmpires.TILE_SIZE - 7;
-
-        super.update(steps);
     }
     setHealth(health: number) {
         this.health = health;
@@ -257,9 +297,12 @@ class Entity extends Sprite {
     }
 
     getMovement(): number {
-        // if poisoned, less -> apply here
-        return this.data.mov;
+        return this.data.mov + this.mov_boost;
     }
+    shouldCounter(target: Pos): boolean {
+        return (this.health > 0 && this.position.distanceTo(target) < 2 && this.data.min < 2);
+    }
+
     destroy() {
         this.icon_health.destroy();
         this.icon_moved.destroy();

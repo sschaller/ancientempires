@@ -23,6 +23,8 @@
     "gulp-sourcemaps": "^1.6.0",
     "gulp-tslint": "^4.3.4",
     "gulp-concat": "^2.6.0",
+    "gulp-uglify": "*",
+    "gulp-wrap": "*",
     "buffer-reader": "*",
     "util": "*"
   },

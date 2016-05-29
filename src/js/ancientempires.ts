@@ -28,7 +28,8 @@ class AncientEmpires {
     height: number =  204;
 
     constructor(div_id: string) {
-        AncientEmpires.game = new Phaser.Game(this.width, this.height, Phaser.AUTO, div_id, this);
+        AncientEmpires.game = new Phaser.Game(this.width, this.height, Phaser.AUTO, div_id, this, false, false);
+
         this.loader = new Loader();
         this.mainMenu = new MainMenu();
         this.controller = new GameController();

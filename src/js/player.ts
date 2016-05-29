@@ -35,13 +35,14 @@ class Player extends Interaction {
 
         switch (this.context[this.context.length - 1]) {
             case InputContext.Map:
-                if (this.keys.isKeyPressed(Key.Up) && this.delegate.cursor_still && this.delegate.cursor_target.y > 0) {
+                let cursor_still = this.delegate.cursor.world_position.x % 24 == 0 && this.delegate.cursor.world_position.y % 24 == 0;
+                if (this.keys.isKeyPressed(Key.Up) && cursor_still && this.delegate.cursor_target.y > 0) {
                     this.delegate.cursor_target.move(Direction.Up);
-                } else if (this.keys.isKeyPressed(Key.Right) && this.delegate.cursor_still && this.delegate.cursor_target.x < this.map.width - 1) {
+                } else if (this.keys.isKeyPressed(Key.Right) && cursor_still && this.delegate.cursor_target.x < this.map.width - 1) {
                     this.delegate.cursor_target.move(Direction.Right);
-                } else if (this.keys.isKeyPressed(Key.Down) && this.delegate.cursor_still && this.delegate.cursor_target.y < this.map.height - 1) {
+                } else if (this.keys.isKeyPressed(Key.Down) && cursor_still && this.delegate.cursor_target.y < this.map.height - 1) {
                     this.delegate.cursor_target.move(Direction.Down);
-                } else if (this.keys.isKeyPressed(Key.Left) && this.delegate.cursor_still && this.delegate.cursor_target.x > 0) {
+                } else if (this.keys.isKeyPressed(Key.Left) && cursor_still && this.delegate.cursor_target.x > 0) {
                     this.delegate.cursor_target.move(Direction.Left);
                 } else if (this.keys.isKeyPressed(Key.Enter)) {
                     this.keys.clearKeyPressed(Key.Enter);

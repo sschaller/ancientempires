@@ -142,7 +142,7 @@ class MainMenu extends Phaser.State implements MenuDelegate {
         this.notification_shown = false;
         this.intro = true;
         this.intro_acc = 0;
-        this.intro_progress = 100;
+        this.intro_progress = 0;
 
         this.game.add.image(0, 0, "splashbg");
         this.knights = this.game.add.image(0, 26, "splashfg");

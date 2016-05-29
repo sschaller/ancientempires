@@ -7,6 +7,8 @@ var concat = require('gulp-concat');
 
 var typescript = require("gulp-typescript");
 var tslint = require("gulp-tslint");
+var uglify = require("gulp-uglify");
+var wrap = require("gulp-wrap");
 
 // Load all gulp plugins automatically
 // and attach them to the `plugins` object
@@ -101,8 +103,9 @@ gulp.task('copy:jquery', function () {
 
 gulp.task('copy:license', function () {
     return gulp.src('LICENSE.txt')
-               .pipe(gulp.dest(dirs.dist));
+        .pipe(gulp.dest(dirs.dist));
 });
+
 
 gulp.task('copy:main.css', function () {
 
@@ -172,6 +175,20 @@ gulp.task('compile:ts', function () {
         .pipe(gulp.dest('src/js'));
 });
 
+gulp.task('deploy:ts', function() {
+    var tsResult = gulp.src("src/js/*.ts")
+        .pipe(typescript({
+            sortOutput: true
+        }));
+
+
+
+    return tsResult
+        .pipe(concat('main.js')) // You can use other plugins that also support gulp-sourcemaps
+        .pipe(wrap("window.AE = (function(){<%= contents %> return AncientEmpires;})();"))
+        .pipe(uglify({mangle: {toplevel: true}}))
+        .pipe(gulp.dest('dist/js/'));
+});
 
 // ---------------------------------------------------------------------
 // | Main tasks                                                        |

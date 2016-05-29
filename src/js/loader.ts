@@ -12,6 +12,10 @@ class Loader extends Phaser.State {
     }
 
     preload() {
+
+        this.game.scale.scaleMode = Phaser.ScaleManager.USER_SCALE;
+        this.game.scale.setUserScale(2, 2);
+
         this.game.load.bitmapFont("font7", "data/font.png", "data/font.xml");
         this.game.load.binary("data", "data/1.pak", function(key: string, data: any): Uint8Array {
             return new Uint8Array(data);

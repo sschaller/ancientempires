@@ -356,7 +356,7 @@ class Player extends Interaction {
             case Action.CANCEL:
                 if (!!this.last_entity_position) {
                     // last action was walking. reset entity & set cursor to current position
-                    this.delegate.cursor_target = this.selected_entity.position;
+                    this.delegate.cursor_target = this.selected_entity.position.copy();
 
                     this.delegate.moveEntity(this.selected_entity, this.last_entity_position, false);
                     this.last_entity_position = null;

@@ -93,7 +93,7 @@ class MenuDefInfo extends Frame {
 
         this.def_amount.setText(Map.getDefForTile(tile, entity ? entity.type : undefined).toString());
 
-        if (!!entity && !entity.isDead()) {
+        if (!!entity) {
             this.updateSize(68, 52);
             if (this.entity_icon.key != "unit_icons_" + entity.alliance) {
                 this.entity_icon.loadTexture("unit_icons_" + entity.alliance);

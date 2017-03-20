@@ -241,7 +241,7 @@ class Entity extends Sprite {
             progress: 0,
             line: line,
             delegate: delegate,
-            target: target
+            target: target.copy()
         };
     }
     update(steps: number = 1) {
@@ -262,6 +262,7 @@ class Entity extends Sprite {
             } else {
                 this.position = this.path.target;
                 this.world_position = this.path.target.getWorldPosition();
+                console.log("test" + this.path.target);
                 let delegate = this.path.delegate;
                 this.path = null;
                 delegate.entityDidMove(this);

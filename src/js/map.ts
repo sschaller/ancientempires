@@ -198,7 +198,7 @@ class Map {
 
     getEntityAt(position: Pos) {
         for (let entity of this.entities) {
-            if (entity.position.match(position)) {
+            if (entity.position.match(position) && !entity.isDead()) {
                 return entity;
             }
         }
@@ -360,6 +360,7 @@ class Map {
             return [];
         }
         if (this.getEntityAt(entity.position) != entity) {
+            // if just bought, need to move from where king is
             return [Action.MOVE];
         }
 

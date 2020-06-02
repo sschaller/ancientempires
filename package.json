@@ -1,54 +1,26 @@
 {
-  "devDependencies": {
-    "@alrra/travis-scripts": "^1.1.1",
-    "apache-server-configs": "2.14.0",
-    "archiver": "^0.21.0",
-    "del": "^2.0.2",
-    "glob": "^6.0.1",
-    "gulp": "^3.8.11",
-    "gulp-autoprefixer": "^3.0.2",
-    "gulp-header": "^1.2.2",
-    "gulp-jscs": "^3.0.1",
-    "gulp-jshint": "^2.0.0",
-    "gulp-load-plugins": "^1.1.0",
-    "gulp-rename": "^1.2.0",
-    "gulp-replace": "^0.5.3",
-    "jquery": "1.12.0",
-    "jshint": "^2.8.0",
-    "jshint-stylish": "^2.0.1",
-    "mocha": "^2.2.4",
-    "normalize.css": "3.0.3",
-    "run-sequence": "^1.0.2",
-    "gulp-typescript": "^2.12.1",
-    "gulp-sourcemaps": "^1.6.0",
-    "gulp-tslint": "^4.3.4",
-    "gulp-concat": "^2.6.0",
-    "gulp-uglify": "*",
-    "gulp-wrap": "*",
-    "buffer-reader": "*",
-    "util": "*"
-  },
-  "engines": {
-    "node": ">=0.10.0"
-  },
-  "h5bp-configs": {
-    "directories": {
-      "archive": "archive",
-      "dist": "dist",
-      "src": "src",
-      "test": "test"
-    }
-  },
-  "homepage": "https://html5boilerplate.com/",
-  "license": {
-    "type": "MIT",
-    "url": "https://github.com/h5bp/html5-boilerplate/blob/master/LICENSE.txt"
-  },
-  "name": "html5-boilerplate",
-  "private": true,
+  "name": "ancientempires",
+  "version": "1.0.0",
+  "description": "Ancient Empires Clone",
+  "main": "index.html",
   "scripts": {
-    "build": "gulp build",
-    "test": "gulp archive && mocha --reporter spec --timeout 5000"
+    "tsc": "tsc",
+    "minify": "uglifyjs --compress --mangle --output dist/app.min.js -- dist/app.js",
+    "all": "tsc && uglifyjs --compress --mangle --output dist/app.min.js -- dist/app.js"
   },
-  "version": "5.3.0"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sschaller/ancientempires.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sschaller/ancientempires/issues"
+  },
+  "homepage": "https://github.com/sschaller/ancientempires#readme",
+  "devDependencies": {
+    "phaser-ce": "^2.15.1",
+    "typescript": "^3.9.3",
+    "uglify-js": "^3.9.4"
+  }
 }

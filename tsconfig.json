@@ -1,12 +1,10 @@
 {
-    "compileOnSave": true,
-    "compilerOptions": {
-        "module": "commonjs",
-        "target": "es5",
-        "sourceMap": true,
-        "outFile": "src/js/main.js"
-    },
-    "files": [
-        "src/js/*.ts"
-    ]
+  "compilerOptions": {
+    "target": "es5",
+    "sourceMap": true,
+    "outFile": "dist/app.js"
+  },
+  "include": [
+    "src/*.ts"
+  ]
 }
